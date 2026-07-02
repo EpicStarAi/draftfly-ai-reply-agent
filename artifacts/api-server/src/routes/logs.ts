@@ -1,0 +1,48 @@
+import { Router, type IRouter } from "express";
+import { eq, and, desc } from "drizzle-orm";
+import { db, logsTable } from "@workspace/db";
+import {
+  ListLogsQueryParams,
+  ListLogsResponse,
+  GetLogParams,
+  GetLogResponse,
+} from "@workspace/api-zod";
+import { sql } from "drizzle-orm";
+
+const router: IRouter = Router();
+
+router.get("/logs", async (req, res): Promise<void> => {
+  const query = ListLogsQueryParams.safeParse(req.query);
+  if (!query.success) {
+    res.status(400).json({ error: query.error.message });
+    return;
+  }
+
+  const conditions = [];
+  if (query.data.clientId != null) conditions.push(eq(logsTable.clientId, query.data.clientId));
+  if (query.data.level) conditions.push(eq(logsTable.level, query.data.level as "info" | "warning" | "error"));
+
+  const limit = query.data.limit ?? 50;
+
+  const logs = conditions.length > 0
+    ? await db.select().from(logsTable).where(and(...conditions)).orderBy(desc(logsTable.createdAt)).limit(limit)
+    : await db.select().from(logsTable).orderBy(desc(logsTable.createdAt)).limit(limit);
+
+  res.json(ListLogsResponse.parse(logs));
+});
+
+router.get("/logs/:id", async (req, res): Promise<void> => {
+  const params = GetLogParams.safeParse(req.params);
+  if (!params.success) {
+    res.status(400).json({ error: params.error.message });
+    return;
+  }
+  const [log] = await db.select().from(logsTable).where(eq(logsTable.id, params.data.id));
+  if (!log) {
+    res.status(404).json({ error: "Log not found" });
+    return;
+  }
+  res.json(GetLogResponse.parse(log));
+});
+
+export default router;
