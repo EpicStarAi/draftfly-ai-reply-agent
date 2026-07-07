@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * DraftFly API — AI-powered reply automation for B2B sales agencies
- * OpenAPI spec version: 0.1.0
+ * OpenAPI spec version: 0.2.0
  */
 export interface HealthStatus {
   status: string;
@@ -23,12 +23,16 @@ export interface Client {
   /** @nullable */
   company?: string | null;
   slackChannel: string;
+  /** @nullable */
+  slackWorkspaceId?: string | null;
+  /** @nullable */
+  slackBotToken?: string | null;
   mode: ClientMode;
   /** @nullable */
   lemlistApiKey?: string | null;
   /** @nullable */
   n8nWebhookUrl?: string | null;
-  isActive?: boolean;
+  isActive: boolean;
   createdAt: string;
 }
 
@@ -44,6 +48,8 @@ export interface ClientInput {
   name: string;
   company?: string;
   slackChannel: string;
+  slackWorkspaceId?: string;
+  slackBotToken?: string;
   mode: ClientInputMode;
   lemlistApiKey?: string;
   n8nWebhookUrl?: string;
@@ -61,38 +67,85 @@ export interface ClientUpdate {
   name?: string;
   company?: string;
   slackChannel?: string;
+  slackWorkspaceId?: string;
+  slackBotToken?: string;
   mode?: ClientUpdateMode;
   lemlistApiKey?: string;
   n8nWebhookUrl?: string;
   isActive?: boolean;
 }
 
-export interface Campaign {
+export interface Persona {
   id: number;
   clientId: number;
   name: string;
-  lemlistCampaignId: string;
-  persona: string;
+  productDescription: string;
+  targetAudience: string;
+  toneOfVoice: string;
   /** @nullable */
-  systemPrompt?: string | null;
-  isActive?: boolean;
-  replyCount?: number;
+  commonObjections?: string | null;
+  cta: string;
+  /** @nullable */
+  qualificationRules?: string | null;
+  createdAt: string;
+}
+
+export interface PersonaInput {
+  clientId: number;
+  name: string;
+  productDescription: string;
+  targetAudience: string;
+  toneOfVoice: string;
+  commonObjections?: string;
+  cta: string;
+  qualificationRules?: string;
+}
+
+export interface PersonaUpdate {
+  name?: string;
+  productDescription?: string;
+  targetAudience?: string;
+  toneOfVoice?: string;
+  commonObjections?: string;
+  cta?: string;
+  qualificationRules?: string;
+}
+
+export interface Campaign {
+  id: number;
+  clientId: number;
+  /** @nullable */
+  personaId?: number | null;
+  name: string;
+  lemlistCampaignId: string;
+  /** @nullable */
+  tone?: string | null;
+  /** @nullable */
+  replyRules?: string | null;
+  /** @nullable */
+  regionRules?: string | null;
+  isActive: boolean;
+  replyCount: number;
   createdAt: string;
 }
 
 export interface CampaignInput {
   clientId: number;
+  personaId?: number;
   name: string;
   lemlistCampaignId: string;
-  persona: string;
-  systemPrompt?: string;
+  tone?: string;
+  replyRules?: string;
+  regionRules?: string;
 }
 
 export interface CampaignUpdate {
+  personaId?: number;
   name?: string;
   lemlistCampaignId?: string;
-  persona?: string;
-  systemPrompt?: string;
+  tone?: string;
+  replyRules?: string;
+  regionRules?: string;
   isActive?: boolean;
 }
 
@@ -125,6 +178,10 @@ export interface Draft {
   prospectName: string;
   /** @nullable */
   prospectCompany?: string | null;
+  /** @nullable */
+  prospectCountry?: string | null;
+  /** @nullable */
+  prospectRole?: string | null;
   /** @nullable */
   conversationSnippet?: string | null;
   replyText: string;
@@ -172,6 +229,19 @@ export const LogEntrySource = {
   system: 'system',
 } as const;
 
+/**
+ * @nullable
+ */
+export type LogEntryFinalStatus = typeof LogEntryFinalStatus[keyof typeof LogEntryFinalStatus] | null;
+
+
+export const LogEntryFinalStatus = {
+  draft: 'draft',
+  sent: 'sent',
+  edited: 'edited',
+  discarded: 'discarded',
+} as const;
+
 export interface LogEntry {
   id: number;
   /** @nullable */
@@ -180,9 +250,15 @@ export interface LogEntry {
   campaignId?: number | null;
   /** @nullable */
   draftId?: number | null;
+  /** @nullable */
+  leadId?: string | null;
   level: LogEntryLevel;
   message: string;
   source: LogEntrySource;
+  /** @nullable */
+  generatedDraft?: string | null;
+  /** @nullable */
+  finalStatus?: LogEntryFinalStatus;
   /** @nullable */
   metadata?: string | null;
   createdAt: string;
@@ -198,11 +274,20 @@ export const SetupItemCategory = {
   testing: 'testing',
 } as const;
 
+export type SetupItemChecklistType = typeof SetupItemChecklistType[keyof typeof SetupItemChecklistType];
+
+
+export const SetupItemChecklistType = {
+  client_onboarding: 'client_onboarding',
+  internal_setup: 'internal_setup',
+} as const;
+
 export interface SetupItem {
   id: number;
   title: string;
   description: string;
   category: SetupItemCategory;
+  checklistType: SetupItemChecklistType;
   isCompleted: boolean;
   /** @nullable */
   completedAt?: string | null;
@@ -215,6 +300,7 @@ export interface SetupItemUpdate {
 export interface DashboardStats {
   totalClients: number;
   activeCampaigns: number;
+  totalPersonas: number;
   pendingDrafts: number;
   totalDraftsSent: number;
   totalDraftsDiscarded: number;
@@ -246,6 +332,10 @@ export interface ActivityItem {
   createdAt: string;
 }
 
+export type ListPersonasParams = {
+clientId?: number;
+};
+
 export type ListCampaignsParams = {
 clientId?: number;
 };
@@ -268,6 +358,7 @@ export const ListDraftsStatus = {
 export type ListLogsParams = {
 clientId?: number;
 level?: ListLogsLevel;
+source?: ListLogsSource;
 limit?: number;
 };
 
@@ -278,6 +369,29 @@ export const ListLogsLevel = {
   info: 'info',
   warning: 'warning',
   error: 'error',
+} as const;
+
+export type ListLogsSource = typeof ListLogsSource[keyof typeof ListLogsSource];
+
+
+export const ListLogsSource = {
+  lemlist: 'lemlist',
+  n8n: 'n8n',
+  claude: 'claude',
+  slack: 'slack',
+  system: 'system',
+} as const;
+
+export type ListSetupItemsParams = {
+checklistType?: ListSetupItemsChecklistType;
+};
+
+export type ListSetupItemsChecklistType = typeof ListSetupItemsChecklistType[keyof typeof ListSetupItemsChecklistType];
+
+
+export const ListSetupItemsChecklistType = {
+  client_onboarding: 'client_onboarding',
+  internal_setup: 'internal_setup',
 } as const;
 
 export type ListActivityParams = {

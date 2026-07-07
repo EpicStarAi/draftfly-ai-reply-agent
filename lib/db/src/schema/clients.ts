@@ -9,6 +9,8 @@ export const clientsTable = pgTable("clients", {
   name: text("name").notNull(),
   company: text("company"),
   slackChannel: text("slack_channel").notNull(),
+  slackWorkspaceId: text("slack_workspace_id"),
+  slackBotToken: text("slack_bot_token"),
   mode: clientModeEnum("mode").notNull().default("draft"),
   lemlistApiKey: text("lemlist_api_key"),
   n8nWebhookUrl: text("n8n_webhook_url"),

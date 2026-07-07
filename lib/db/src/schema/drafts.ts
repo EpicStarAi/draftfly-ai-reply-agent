@@ -11,6 +11,8 @@ export const draftsTable = pgTable("drafts", {
   prospectEmail: text("prospect_email").notNull(),
   prospectName: text("prospect_name").notNull(),
   prospectCompany: text("prospect_company"),
+  prospectCountry: text("prospect_country"),
+  prospectRole: text("prospect_role"),
   conversationSnippet: text("conversation_snippet"),
   replyText: text("reply_text").notNull(),
   editedReplyText: text("edited_reply_text"),

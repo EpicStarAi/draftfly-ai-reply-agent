@@ -6,12 +6,13 @@
  * OpenAPI spec version: 0.2.0
  */
 
-export interface CampaignInput {
+export interface PersonaInput {
   clientId: number;
-  personaId?: number;
   name: string;
-  lemlistCampaignId: string;
-  tone?: string;
-  replyRules?: string;
-  regionRules?: string;
+  productDescription: string;
+  targetAudience: string;
+  toneOfVoice: string;
+  commonObjections?: string;
+  cta: string;
+  qualificationRules?: string;
 }

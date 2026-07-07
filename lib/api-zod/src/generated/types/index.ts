@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * DraftFly API — AI-powered reply automation for B2B sales agencies
- * OpenAPI spec version: 0.1.0
+ * OpenAPI spec version: 0.2.0
  */
 
 export * from './activityItem';
@@ -30,9 +30,18 @@ export * from './listDraftsParams';
 export * from './listDraftsStatus';
 export * from './listLogsLevel';
 export * from './listLogsParams';
+export * from './listLogsSource';
+export * from './listPersonasParams';
+export * from './listSetupItemsChecklistType';
+export * from './listSetupItemsParams';
 export * from './logEntry';
+export * from './logEntryFinalStatus';
 export * from './logEntryLevel';
 export * from './logEntrySource';
+export * from './persona';
+export * from './personaInput';
+export * from './personaUpdate';
 export * from './setupItem';
 export * from './setupItemCategory';
+export * from './setupItemChecklistType';
 export * from './setupItemUpdate';

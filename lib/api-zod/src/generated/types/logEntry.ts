@@ -3,8 +3,9 @@
  * Do not edit manually.
  * Api
  * DraftFly API — AI-powered reply automation for B2B sales agencies
- * OpenAPI spec version: 0.1.0
+ * OpenAPI spec version: 0.2.0
  */
+import type { LogEntryFinalStatus } from './logEntryFinalStatus';
 import type { LogEntryLevel } from './logEntryLevel';
 import type { LogEntrySource } from './logEntrySource';
 
@@ -16,9 +17,15 @@ export interface LogEntry {
   campaignId?: number | null;
   /** @nullable */
   draftId?: number | null;
+  /** @nullable */
+  leadId?: string | null;
   level: LogEntryLevel;
   message: string;
   source: LogEntrySource;
+  /** @nullable */
+  generatedDraft?: string | null;
+  /** @nullable */
+  finalStatus?: LogEntryFinalStatus;
   /** @nullable */
   metadata?: string | null;
   createdAt: Date;

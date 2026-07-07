@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useState, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, BarChart } from "lucide-react";
+import { ArrowLeft, BarChart, Globe } from "lucide-react";
 
 export default function CampaignDetail() {
   const { id } = useParams();
@@ -51,19 +51,26 @@ export default function CampaignDetail() {
     });
   };
 
-  if (isLoading) return <div className="p-8 text-center text-muted-foreground animate-pulse">Loading campaign...</div>;
-  if (!campaign) return <div className="p-8 text-center text-muted-foreground">Campaign not found.</div>;
+  if (isLoading) return <div className="p-8 text-center text-muted-foreground animate-pulse" data-testid="loading-state">Loading campaign...</div>;
+  if (!campaign) return <div className="p-8 text-center text-muted-foreground" data-testid="empty-state">Campaign not found.</div>;
+
+  const regionRules = [
+    { region: "UK", desc: "Concise and slightly formal" },
+    { region: "US", desc: "Direct, outcome-focused" },
+    { region: "DACH", desc: "Structured and detail-oriented" },
+    { region: "Middle East", desc: "Warmer and relationship-first" },
+  ];
 
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-4">
-        <Button variant="ghost" size="icon" asChild>
+        <Button variant="ghost" size="icon" asChild data-testid="button-back">
           <Link href="/campaigns"><ArrowLeft className="h-4 w-4" /></Link>
         </Button>
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">{campaign.name}</h1>
+          <h1 className="text-2xl font-semibold tracking-tight" data-testid="text-campaign-name">{campaign.name}</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Lemlist ID: <span className="font-mono">{campaign.lemlistCampaignId}</span>
+            Lemlist ID: <span className="font-mono text-foreground" data-testid="text-campaign-id">{campaign.lemlistCampaignId}</span>
           </p>
         </div>
       </div>
@@ -79,36 +86,57 @@ export default function CampaignDetail() {
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="name">Name</Label>
-                    <Input id="name" required value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} />
+                    <Input id="name" data-testid="input-name" required value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} />
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="lemlistCampaignId">Lemlist ID</Label>
-                    <Input id="lemlistCampaignId" required value={formData.lemlistCampaignId} onChange={e => setFormData({ ...formData, lemlistCampaignId: e.target.value })} />
+                    <Input id="lemlistCampaignId" data-testid="input-lemlist-id" required value={formData.lemlistCampaignId} onChange={e => setFormData({ ...formData, lemlistCampaignId: e.target.value })} />
                   </div>
                 </div>
                 
                 <div className="space-y-2">
-                  <Label htmlFor="persona">Persona</Label>
-                  <Input id="persona" required value={formData.persona} onChange={e => setFormData({ ...formData, persona: e.target.value })} />
+                  <Label htmlFor="persona">Mapped Persona</Label>
+                  <Input id="persona" data-testid="input-persona" required value={formData.persona} onChange={e => setFormData({ ...formData, persona: e.target.value })} />
+                  <p className="text-xs text-muted-foreground">The AI Persona used to generate replies for this campaign.</p>
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="systemPrompt">Custom System Prompt</Label>
+                  <Label htmlFor="systemPrompt">Campaign Reply Rules (Optional)</Label>
                   <Textarea 
                     id="systemPrompt" 
+                    data-testid="input-system-prompt"
                     className="min-h-[150px] font-mono text-xs" 
-                    placeholder="Override default instructions for Claude..."
+                    placeholder="Specific instructions for replies in this campaign..."
                     value={formData.systemPrompt} 
                     onChange={e => setFormData({ ...formData, systemPrompt: e.target.value })} 
                   />
                 </div>
 
                 <div className="pt-2 flex justify-end">
-                  <Button type="submit" disabled={updateCampaign.isPending}>
+                  <Button type="submit" disabled={updateCampaign.isPending} data-testid="button-save-config">
                     {updateCampaign.isPending ? "Saving..." : "Save Config"}
                   </Button>
                 </div>
               </form>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base font-semibold flex items-center gap-2">
+                <Globe className="h-4 w-4" /> Region Rules
+              </CardTitle>
+              <CardDescription>Tone adaptation rules applied automatically based on prospect location.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {regionRules.map((rule, idx) => (
+                  <div key={idx} className="p-3 border rounded-md bg-muted/20" data-testid={`card-region-${rule.region.toLowerCase().replace(/\s+/g, '-')}`}>
+                    <div className="font-semibold text-sm mb-1 text-primary">{rule.region}</div>
+                    <div className="text-xs text-muted-foreground">{rule.desc}</div>
+                  </div>
+                ))}
+              </div>
             </CardContent>
           </Card>
         </div>
@@ -122,26 +150,26 @@ export default function CampaignDetail() {
             </CardHeader>
             <CardContent>
               {stats ? (
-                <div className="space-y-4 text-sm">
-                  <div className="flex justify-between items-center py-1 border-b">
+                <div className="space-y-4 text-sm" data-testid="card-stats">
+                  <div className="flex justify-between items-center py-1 border-b border-border/50">
                     <span className="text-muted-foreground">Total Replies</span>
                     <span className="font-semibold">{stats.totalReplies}</span>
                   </div>
-                  <div className="flex justify-between items-center py-1 border-b">
+                  <div className="flex justify-between items-center py-1 border-b border-border/50">
                     <span className="text-muted-foreground">Pending</span>
-                    <span className="font-semibold text-yellow-600 dark:text-yellow-500">{stats.pending}</span>
+                    <span className="font-semibold text-amber-500">{stats.pending}</span>
                   </div>
-                  <div className="flex justify-between items-center py-1 border-b">
+                  <div className="flex justify-between items-center py-1 border-b border-border/50">
                     <span className="text-muted-foreground">Auto/Sent</span>
-                    <span className="font-semibold text-green-600 dark:text-green-500">{stats.sent}</span>
+                    <span className="font-semibold text-emerald-500">{stats.sent}</span>
                   </div>
-                  <div className="flex justify-between items-center py-1 border-b">
+                  <div className="flex justify-between items-center py-1 border-b border-border/50">
                     <span className="text-muted-foreground">Edited</span>
-                    <span className="font-semibold text-blue-600 dark:text-blue-500">{stats.edited}</span>
+                    <span className="font-semibold text-primary">{stats.edited}</span>
                   </div>
                   <div className="flex justify-between items-center py-1">
                     <span className="text-muted-foreground">Discarded</span>
-                    <span className="font-semibold text-red-600 dark:text-red-500">{stats.discarded}</span>
+                    <span className="font-semibold text-destructive">{stats.discarded}</span>
                   </div>
                 </div>
               ) : (

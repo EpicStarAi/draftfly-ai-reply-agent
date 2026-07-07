@@ -6,10 +6,10 @@
  * OpenAPI spec version: 0.2.0
  */
 
-export type LogEntrySource = typeof LogEntrySource[keyof typeof LogEntrySource];
+export type ListLogsSource = typeof ListLogsSource[keyof typeof ListLogsSource];
 
 
-export const LogEntrySource = {
+export const ListLogsSource = {
   lemlist: 'lemlist',
   n8n: 'n8n',
   claude: 'claude',

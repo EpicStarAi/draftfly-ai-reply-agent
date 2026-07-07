@@ -2,26 +2,20 @@ openapi: 3.1.0
 info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
-  version: 0.1.0
+  version: 0.2.0
   description: DraftFly API — AI-powered reply automation for B2B sales agencies
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
-    description: Health operations
   - name: clients
-    description: Client account management
+  - name: personas
   - name: campaigns
-    description: Campaign configuration and mapping
   - name: drafts
-    description: Claude-generated reply drafts with Slack approval
   - name: logs
-    description: Activity and event logs
   - name: setup
-    description: Operator setup checklist
   - name: dashboard
-    description: Summary metrics and activity feed
 
 paths:
   /healthz:
@@ -127,6 +121,101 @@ paths:
         "204":
           description: Deleted
 
+  # ---------- PERSONAS ----------
+  /personas:
+    get:
+      operationId: listPersonas
+      tags: [personas]
+      summary: List all personas
+      parameters:
+        - name: clientId
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: List of personas
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Persona"
+    post:
+      operationId: createPersona
+      tags: [personas]
+      summary: Create a persona
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PersonaInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Persona"
+
+  /personas/{id}:
+    get:
+      operationId: getPersona
+      tags: [personas]
+      summary: Get a persona
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Persona detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Persona"
+        "404":
+          description: Not found
+    patch:
+      operationId: updatePersona
+      tags: [personas]
+      summary: Update a persona
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PersonaUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Persona"
+    delete:
+      operationId: deletePersona
+      tags: [personas]
+      summary: Delete a persona
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
   # ---------- CAMPAIGNS ----------
   /campaigns:
     get:
@@ -221,6 +310,25 @@ paths:
       responses:
         "204":
           description: Deleted
+
+  /campaigns/{id}/stats:
+    get:
+      operationId: getCampaignStats
+      tags: [campaigns]
+      summary: Per-campaign reply and draft statistics
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Campaign stats
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CampaignStats"
 
   # ---------- DRAFTS ----------
   /drafts:
@@ -325,6 +433,11 @@ paths:
           schema:
             type: string
             enum: [info, warning, error]
+        - name: source
+          in: query
+          schema:
+            type: string
+            enum: [lemlist, n8n, claude, slack, system]
         - name: limit
           in: query
           schema:
@@ -364,7 +477,13 @@ paths:
     get:
       operationId: listSetupItems
       tags: [setup]
-      summary: Get the operator setup checklist
+      summary: Get setup checklist items
+      parameters:
+        - name: checklistType
+          in: query
+          schema:
+            type: string
+            enum: [client_onboarding, internal_setup]
       responses:
         "200":
           description: Setup items
@@ -400,7 +519,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/SetupItem"
 
-  # ---------- DASHBOARD / WOW ENDPOINTS ----------
+  # ---------- DASHBOARD ----------
   /dashboard/stats:
     get:
       operationId: getDashboardStats
@@ -435,25 +554,6 @@ paths:
                 items:
                   $ref: "#/components/schemas/ActivityItem"
 
-  /campaigns/{id}/stats:
-    get:
-      operationId: getCampaignStats
-      tags: [campaigns]
-      summary: Per-campaign reply and draft statistics
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: integer
-      responses:
-        "200":
-          description: Campaign stats
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/CampaignStats"
-
 components:
   schemas:
     HealthStatus:
@@ -461,13 +561,12 @@ components:
       properties:
         status:
           type: string
-      required:
-        - status
+      required: [status]
 
     # ---- Client ----
     Client:
       type: object
-      required: [id, name, slackChannel, mode, createdAt]
+      required: [id, name, slackChannel, mode, isActive, createdAt]
       properties:
         id:
           type: integer
@@ -477,6 +576,10 @@ components:
           type: ["string", "null"]
         slackChannel:
           type: string
+        slackWorkspaceId:
+          type: ["string", "null"]
+        slackBotToken:
+          type: ["string", "null"]
         mode:
           type: string
           enum: [draft, auto]
@@ -500,6 +603,10 @@ components:
           type: string
         slackChannel:
           type: string
+        slackWorkspaceId:
+          type: string
+        slackBotToken:
+          type: string
         mode:
           type: string
           enum: [draft, auto]
@@ -517,6 +624,10 @@ components:
           type: string
         slackChannel:
           type: string
+        slackWorkspaceId:
+          type: string
+        slackBotToken:
+          type: string
         mode:
           type: string
           enum: [draft, auto]
@@ -527,10 +638,10 @@ components:
         isActive:
           type: boolean
 
-    # ---- Campaign ----
-    Campaign:
+    # ---- Persona ----
+    Persona:
       type: object
-      required: [id, clientId, name, lemlistCampaignId, persona, createdAt]
+      required: [id, clientId, name, productDescription, targetAudience, toneOfVoice, cta, createdAt]
       properties:
         id:
           type: integer
@@ -538,11 +649,81 @@ components:
           type: integer
         name:
           type: string
+        productDescription:
+          type: string
+        targetAudience:
+          type: string
+        toneOfVoice:
+          type: string
+        commonObjections:
+          type: ["string", "null"]
+        cta:
+          type: string
+        qualificationRules:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+
+    PersonaInput:
+      type: object
+      required: [clientId, name, productDescription, targetAudience, toneOfVoice, cta]
+      properties:
+        clientId:
+          type: integer
+        name:
+          type: string
+        productDescription:
+          type: string
+        targetAudience:
+          type: string
+        toneOfVoice:
+          type: string
+        commonObjections:
+          type: string
+        cta:
+          type: string
+        qualificationRules:
+          type: string
+
+    PersonaUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+        productDescription:
+          type: string
+        targetAudience:
+          type: string
+        toneOfVoice:
+          type: string
+        commonObjections:
+          type: string
+        cta:
+          type: string
+        qualificationRules:
+          type: string
+
+    # ---- Campaign ----
+    Campaign:
+      type: object
+      required: [id, clientId, name, lemlistCampaignId, isActive, replyCount, createdAt]
+      properties:
+        id:
+          type: integer
+        clientId:
+          type: integer
+        personaId:
+          type: ["integer", "null"]
+        name:
+          type: string
         lemlistCampaignId:
           type: string
-        persona:
-          type: string
-        systemPrompt:
+        tone:
+          type: ["string", "null"]
+        replyRules:
+          type: ["string", "null"]
+        regionRules:
           type: ["string", "null"]
         isActive:
           type: boolean
@@ -554,29 +735,37 @@ components:
 
     CampaignInput:
       type: object
-      required: [clientId, name, lemlistCampaignId, persona]
+      required: [clientId, name, lemlistCampaignId]
       properties:
         clientId:
+          type: integer
+        personaId:
           type: integer
         name:
           type: string
         lemlistCampaignId:
           type: string
-        persona:
+        tone:
           type: string
-        systemPrompt:
+        replyRules:
+          type: string
+        regionRules:
           type: string
 
     CampaignUpdate:
       type: object
       properties:
+        personaId:
+          type: integer
         name:
           type: string
         lemlistCampaignId:
           type: string
-        persona:
+        tone:
           type: string
-        systemPrompt:
+        replyRules:
+          type: string
+        regionRules:
           type: string
         isActive:
           type: boolean
@@ -616,6 +805,10 @@ components:
         prospectName:
           type: string
         prospectCompany:
+          type: ["string", "null"]
+        prospectCountry:
+          type: ["string", "null"]
+        prospectRole:
           type: ["string", "null"]
         conversationSnippet:
           type: ["string", "null"]
@@ -658,6 +851,8 @@ components:
           type: ["integer", "null"]
         draftId:
           type: ["integer", "null"]
+        leadId:
+          type: ["string", "null"]
         level:
           type: string
           enum: [info, warning, error]
@@ -666,6 +861,11 @@ components:
         source:
           type: string
           enum: [lemlist, n8n, claude, slack, system]
+        generatedDraft:
+          type: ["string", "null"]
+        finalStatus:
+          type: ["string", "null"]
+          enum: [draft, sent, edited, discarded, null]
         metadata:
           type: ["string", "null"]
         createdAt:
@@ -675,7 +875,7 @@ components:
     # ---- Setup ----
     SetupItem:
       type: object
-      required: [id, title, description, category, isCompleted]
+      required: [id, title, description, category, checklistType, isCompleted]
       properties:
         id:
           type: integer
@@ -686,6 +886,9 @@ components:
         category:
           type: string
           enum: [infrastructure, integrations, configuration, testing]
+        checklistType:
+          type: string
+          enum: [client_onboarding, internal_setup]
         isCompleted:
           type: boolean
         completedAt:
@@ -702,11 +905,13 @@ components:
     # ---- Dashboard ----
     DashboardStats:
       type: object
-      required: [totalClients, activeCampaigns, pendingDrafts, totalDraftsSent, totalDraftsDiscarded, totalDraftsEdited, webhooksToday, successRate]
+      required: [totalClients, activeCampaigns, totalPersonas, pendingDrafts, totalDraftsSent, totalDraftsDiscarded, totalDraftsEdited, webhooksToday, successRate]
       properties:
         totalClients:
           type: integer
         activeCampaigns:
+          type: integer
+        totalPersonas:
           type: integer
         pendingDrafts:
           type: integer

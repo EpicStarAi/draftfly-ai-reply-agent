@@ -6,20 +6,17 @@
  * OpenAPI spec version: 0.2.0
  */
 
-export interface Campaign {
+export interface Persona {
   id: number;
   clientId: number;
-  /** @nullable */
-  personaId?: number | null;
   name: string;
-  lemlistCampaignId: string;
+  productDescription: string;
+  targetAudience: string;
+  toneOfVoice: string;
   /** @nullable */
-  tone?: string | null;
+  commonObjections?: string | null;
+  cta: string;
   /** @nullable */
-  replyRules?: string | null;
-  /** @nullable */
-  regionRules?: string | null;
-  isActive: boolean;
-  replyCount: number;
+  qualificationRules?: string | null;
   createdAt: Date;
 }

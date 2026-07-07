@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * DraftFly API — AI-powered reply automation for B2B sales agencies
- * OpenAPI spec version: 0.1.0
+ * OpenAPI spec version: 0.2.0
  */
 import type { DraftStatus } from './draftStatus';
 
@@ -15,6 +15,10 @@ export interface Draft {
   prospectName: string;
   /** @nullable */
   prospectCompany?: string | null;
+  /** @nullable */
+  prospectCountry?: string | null;
+  /** @nullable */
+  prospectRole?: string | null;
   /** @nullable */
   conversationSnippet?: string | null;
   replyText: string;

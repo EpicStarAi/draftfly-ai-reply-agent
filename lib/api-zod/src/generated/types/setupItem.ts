@@ -3,15 +3,17 @@
  * Do not edit manually.
  * Api
  * DraftFly API — AI-powered reply automation for B2B sales agencies
- * OpenAPI spec version: 0.1.0
+ * OpenAPI spec version: 0.2.0
  */
 import type { SetupItemCategory } from './setupItemCategory';
+import type { SetupItemChecklistType } from './setupItemChecklistType';
 
 export interface SetupItem {
   id: number;
   title: string;
   description: string;
   category: SetupItemCategory;
+  checklistType: SetupItemChecklistType;
   isCompleted: boolean;
   /** @nullable */
   completedAt?: Date | null;

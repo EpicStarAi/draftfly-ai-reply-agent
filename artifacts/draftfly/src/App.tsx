@@ -9,12 +9,17 @@ import { AppLayout } from "@/components/layout";
 import Dashboard from "@/pages/dashboard";
 import Clients from "@/pages/clients";
 import ClientDetail from "@/pages/client-detail";
+import Personas from "@/pages/personas";
+import PersonaDetail from "@/pages/persona-detail";
 import Campaigns from "@/pages/campaigns";
 import CampaignDetail from "@/pages/campaign-detail";
 import Drafts from "@/pages/drafts";
 import DraftDetail from "@/pages/draft-detail";
+import SlackApproval from "@/pages/slack-approval";
+import Onboarding from "@/pages/onboarding";
+import InternalSetup from "@/pages/internal-setup";
 import Logs from "@/pages/logs";
-import Setup from "@/pages/setup";
+import Settings from "@/pages/settings";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -32,12 +37,17 @@ function Router() {
         <Route path="/" component={Dashboard} />
         <Route path="/clients" component={Clients} />
         <Route path="/clients/:id" component={ClientDetail} />
+        <Route path="/personas" component={Personas} />
+        <Route path="/personas/:id" component={PersonaDetail} />
         <Route path="/campaigns" component={Campaigns} />
         <Route path="/campaigns/:id" component={CampaignDetail} />
         <Route path="/drafts" component={Drafts} />
         <Route path="/drafts/:id" component={DraftDetail} />
+        <Route path="/slack-approval" component={SlackApproval} />
+        <Route path="/onboarding" component={Onboarding} />
+        <Route path="/internal-setup" component={InternalSetup} />
         <Route path="/logs" component={Logs} />
-        <Route path="/setup" component={Setup} />
+        <Route path="/settings" component={Settings} />
         <Route component={NotFound} />
       </Switch>
     </AppLayout>

@@ -15,7 +15,6 @@ import {
   GetCampaignStatsParams,
   GetCampaignStatsResponse,
 } from "@workspace/api-zod";
-import { count, eq as drizzleEq } from "drizzle-orm";
 
 const router: IRouter = Router();
 
@@ -25,12 +24,9 @@ router.get("/campaigns", async (req, res): Promise<void> => {
     res.status(400).json({ error: query.error.message });
     return;
   }
-  let campaigns;
-  if (query.data.clientId != null) {
-    campaigns = await db.select().from(campaignsTable).where(eq(campaignsTable.clientId, query.data.clientId)).orderBy(campaignsTable.createdAt);
-  } else {
-    campaigns = await db.select().from(campaignsTable).orderBy(campaignsTable.createdAt);
-  }
+  const campaigns = query.data.clientId != null
+    ? await db.select().from(campaignsTable).where(eq(campaignsTable.clientId, query.data.clientId)).orderBy(campaignsTable.createdAt)
+    : await db.select().from(campaignsTable).orderBy(campaignsTable.createdAt);
   res.json(ListCampaignsResponse.parse(campaigns));
 });
 
@@ -69,11 +65,7 @@ router.patch("/campaigns/:id", async (req, res): Promise<void> => {
     res.status(400).json({ error: parsed.error.message });
     return;
   }
-  const [campaign] = await db
-    .update(campaignsTable)
-    .set(parsed.data)
-    .where(eq(campaignsTable.id, params.data.id))
-    .returning();
+  const [campaign] = await db.update(campaignsTable).set(parsed.data).where(eq(campaignsTable.id, params.data.id)).returning();
   if (!campaign) {
     res.status(404).json({ error: "Campaign not found" });
     return;
@@ -102,28 +94,12 @@ router.get("/campaigns/:id/stats", async (req, res): Promise<void> => {
     return;
   }
   const campaignId = params.data.id;
-
-  const drafts = await db
-    .select()
-    .from(draftsTable)
-    .where(eq(draftsTable.campaignId, campaignId));
-
+  const drafts = await db.select().from(draftsTable).where(eq(draftsTable.campaignId, campaignId));
   const sent = drafts.filter((d) => d.status === "sent").length;
   const edited = drafts.filter((d) => d.status === "edited").length;
   const discarded = drafts.filter((d) => d.status === "discarded").length;
   const pending = drafts.filter((d) => d.status === "pending").length;
-
-  res.json(
-    GetCampaignStatsResponse.parse({
-      campaignId,
-      totalReplies: drafts.length,
-      sent,
-      edited,
-      discarded,
-      pending,
-      avgResponseTimeMs: null,
-    })
-  );
+  res.json(GetCampaignStatsResponse.parse({ campaignId, totalReplies: drafts.length, sent, edited, discarded, pending, avgResponseTimeMs: null }));
 });
 
 export default router;

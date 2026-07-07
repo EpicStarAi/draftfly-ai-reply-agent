@@ -3,12 +3,13 @@
  * Do not edit manually.
  * Api
  * DraftFly API — AI-powered reply automation for B2B sales agencies
- * OpenAPI spec version: 0.1.0
+ * OpenAPI spec version: 0.2.0
  */
 
 export interface DashboardStats {
   totalClients: number;
   activeCampaigns: number;
+  totalPersonas: number;
   pendingDrafts: number;
   totalDraftsSent: number;
   totalDraftsDiscarded: number;

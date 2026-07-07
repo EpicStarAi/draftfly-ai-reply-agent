@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * DraftFly API — AI-powered reply automation for B2B sales agencies
- * OpenAPI spec version: 0.1.0
+ * OpenAPI spec version: 0.2.0
  */
 import type { ClientInputMode } from './clientInputMode';
 
@@ -11,6 +11,8 @@ export interface ClientInput {
   name: string;
   company?: string;
   slackChannel: string;
+  slackWorkspaceId?: string;
+  slackBotToken?: string;
   mode: ClientInputMode;
   lemlistApiKey?: string;
   n8nWebhookUrl?: string;

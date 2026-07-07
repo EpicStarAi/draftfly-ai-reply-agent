@@ -5,9 +5,8 @@
  * DraftFly API — AI-powered reply automation for B2B sales agencies
  * OpenAPI spec version: 0.2.0
  */
-import type { ListDraftsStatus } from './listDraftsStatus';
+import type { ListSetupItemsChecklistType } from './listSetupItemsChecklistType';
 
-export type ListDraftsParams = {
-status?: ListDraftsStatus;
-clientId?: number;
+export type ListSetupItemsParams = {
+checklistType?: ListSetupItemsChecklistType;
 };

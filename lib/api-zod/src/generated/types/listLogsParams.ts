@@ -3,12 +3,14 @@
  * Do not edit manually.
  * Api
  * DraftFly API — AI-powered reply automation for B2B sales agencies
- * OpenAPI spec version: 0.1.0
+ * OpenAPI spec version: 0.2.0
  */
 import type { ListLogsLevel } from './listLogsLevel';
+import type { ListLogsSource } from './listLogsSource';
 
 export type ListLogsParams = {
 clientId?: number;
 level?: ListLogsLevel;
+source?: ListLogsSource;
 limit?: number;
 };

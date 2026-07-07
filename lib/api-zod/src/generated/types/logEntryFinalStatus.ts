@@ -6,11 +6,14 @@
  * OpenAPI spec version: 0.2.0
  */
 
-export type DraftStatus = typeof DraftStatus[keyof typeof DraftStatus];
+/**
+ * @nullable
+ */
+export type LogEntryFinalStatus = typeof LogEntryFinalStatus[keyof typeof LogEntryFinalStatus] | null;
 
 
-export const DraftStatus = {
-  pending: 'pending',
+export const LogEntryFinalStatus = {
+  draft: 'draft',
   sent: 'sent',
   edited: 'edited',
   discarded: 'discarded',

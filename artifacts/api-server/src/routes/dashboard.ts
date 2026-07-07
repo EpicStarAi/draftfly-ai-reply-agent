@@ -1,19 +1,21 @@
 import { Router, type IRouter } from "express";
 import { eq, desc } from "drizzle-orm";
-import { db, clientsTable, campaignsTable, draftsTable, activityTable } from "@workspace/db";
+import { db, clientsTable, campaignsTable, draftsTable, activityTable, personasTable } from "@workspace/db";
 import {
   GetDashboardStatsResponse,
   ListActivityQueryParams,
   ListActivityResponse,
 } from "@workspace/api-zod";
-import { sql } from "drizzle-orm";
 
 const router: IRouter = Router();
 
 router.get("/dashboard/stats", async (_req, res): Promise<void> => {
-  const clients = await db.select().from(clientsTable);
-  const campaigns = await db.select().from(campaignsTable).where(eq(campaignsTable.isActive, true));
-  const allDrafts = await db.select().from(draftsTable);
+  const [clients, campaigns, allDrafts, personas] = await Promise.all([
+    db.select().from(clientsTable),
+    db.select().from(campaignsTable).where(eq(campaignsTable.isActive, true)),
+    db.select().from(draftsTable),
+    db.select().from(personasTable),
+  ]);
 
   const pendingDrafts = allDrafts.filter((d) => d.status === "pending").length;
   const totalDraftsSent = allDrafts.filter((d) => d.status === "sent").length;
@@ -22,26 +24,23 @@ router.get("/dashboard/stats", async (_req, res): Promise<void> => {
 
   const todayStart = new Date();
   todayStart.setHours(0, 0, 0, 0);
-
-  const todayDrafts = allDrafts.filter((d) => new Date(d.createdAt) >= todayStart);
-  const webhooksToday = todayDrafts.length;
+  const webhooksToday = allDrafts.filter((d) => new Date(d.createdAt) >= todayStart).length;
 
   const total = allDrafts.length;
   const actioned = totalDraftsSent + totalDraftsEdited;
   const successRate = total > 0 ? Math.round((actioned / total) * 100) / 100 : 0;
 
-  res.json(
-    GetDashboardStatsResponse.parse({
-      totalClients: clients.length,
-      activeCampaigns: campaigns.length,
-      pendingDrafts,
-      totalDraftsSent,
-      totalDraftsDiscarded,
-      totalDraftsEdited,
-      webhooksToday,
-      successRate,
-    })
-  );
+  res.json(GetDashboardStatsResponse.parse({
+    totalClients: clients.length,
+    activeCampaigns: campaigns.length,
+    totalPersonas: personas.length,
+    pendingDrafts,
+    totalDraftsSent,
+    totalDraftsDiscarded,
+    totalDraftsEdited,
+    webhooksToday,
+    successRate,
+  }));
 });
 
 router.get("/dashboard/activity", async (req, res): Promise<void> => {
@@ -51,12 +50,7 @@ router.get("/dashboard/activity", async (req, res): Promise<void> => {
     return;
   }
   const limit = query.data.limit ?? 20;
-  const activity = await db
-    .select()
-    .from(activityTable)
-    .orderBy(desc(activityTable.createdAt))
-    .limit(limit);
-
+  const activity = await db.select().from(activityTable).orderBy(desc(activityTable.createdAt)).limit(limit);
   res.json(ListActivityResponse.parse(activity));
 });
 

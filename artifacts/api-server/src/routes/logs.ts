@@ -7,7 +7,6 @@ import {
   GetLogParams,
   GetLogResponse,
 } from "@workspace/api-zod";
-import { sql } from "drizzle-orm";
 
 const router: IRouter = Router();
 
@@ -17,17 +16,14 @@ router.get("/logs", async (req, res): Promise<void> => {
     res.status(400).json({ error: query.error.message });
     return;
   }
-
   const conditions = [];
   if (query.data.clientId != null) conditions.push(eq(logsTable.clientId, query.data.clientId));
   if (query.data.level) conditions.push(eq(logsTable.level, query.data.level as "info" | "warning" | "error"));
-
+  if (query.data.source) conditions.push(eq(logsTable.source, query.data.source as "lemlist" | "n8n" | "claude" | "slack" | "system"));
   const limit = query.data.limit ?? 50;
-
   const logs = conditions.length > 0
     ? await db.select().from(logsTable).where(and(...conditions)).orderBy(desc(logsTable.createdAt)).limit(limit)
     : await db.select().from(logsTable).orderBy(desc(logsTable.createdAt)).limit(limit);
-
   res.json(ListLogsResponse.parse(logs));
 });
 

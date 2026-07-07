@@ -1,7 +1,8 @@
 import { Router, type IRouter } from "express";
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { db, setupItemsTable } from "@workspace/db";
 import {
+  ListSetupItemsQueryParams,
   ListSetupItemsResponse,
   UpdateSetupItemParams,
   UpdateSetupItemBody,
@@ -10,8 +11,15 @@ import {
 
 const router: IRouter = Router();
 
-router.get("/setup", async (_req, res): Promise<void> => {
-  const items = await db.select().from(setupItemsTable).orderBy(setupItemsTable.id);
+router.get("/setup", async (req, res): Promise<void> => {
+  const query = ListSetupItemsQueryParams.safeParse(req.query);
+  if (!query.success) {
+    res.status(400).json({ error: query.error.message });
+    return;
+  }
+  const items = query.data.checklistType
+    ? await db.select().from(setupItemsTable).where(eq(setupItemsTable.checklistType, query.data.checklistType as "client_onboarding" | "internal_setup")).orderBy(setupItemsTable.id)
+    : await db.select().from(setupItemsTable).orderBy(setupItemsTable.id);
   res.json(ListSetupItemsResponse.parse(items));
 });
 
@@ -26,18 +34,11 @@ router.patch("/setup/:id", async (req, res): Promise<void> => {
     res.status(400).json({ error: body.error.message });
     return;
   }
-
-  const updateData: Record<string, unknown> = {
-    isCompleted: body.data.isCompleted,
-    completedAt: body.data.isCompleted ? new Date() : null,
-  };
-
   const [item] = await db
     .update(setupItemsTable)
-    .set(updateData)
+    .set({ isCompleted: body.data.isCompleted, completedAt: body.data.isCompleted ? new Date() : null })
     .where(eq(setupItemsTable.id, params.data.id))
     .returning();
-
   if (!item) {
     res.status(404).json({ error: "Setup item not found" });
     return;

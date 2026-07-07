@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * DraftFly API — AI-powered reply automation for B2B sales agencies
- * OpenAPI spec version: 0.1.0
+ * OpenAPI spec version: 0.2.0
  */
 import * as zod from 'zod';
 
@@ -24,10 +24,12 @@ export const ListClientsResponseItem = zod.object({
   "name": zod.string(),
   "company": zod.string().nullish(),
   "slackChannel": zod.string(),
+  "slackWorkspaceId": zod.string().nullish(),
+  "slackBotToken": zod.string().nullish(),
   "mode": zod.enum(['draft', 'auto']),
   "lemlistApiKey": zod.string().nullish(),
   "n8nWebhookUrl": zod.string().nullish(),
-  "isActive": zod.boolean().optional(),
+  "isActive": zod.boolean(),
   "createdAt": zod.coerce.date()
 })
 export const ListClientsResponse = zod.array(ListClientsResponseItem)
@@ -40,6 +42,8 @@ export const CreateClientBody = zod.object({
   "name": zod.string(),
   "company": zod.string().optional(),
   "slackChannel": zod.string(),
+  "slackWorkspaceId": zod.string().optional(),
+  "slackBotToken": zod.string().optional(),
   "mode": zod.enum(['draft', 'auto']),
   "lemlistApiKey": zod.string().optional(),
   "n8nWebhookUrl": zod.string().optional()
@@ -50,10 +54,12 @@ export const CreateClientResponse = zod.object({
   "name": zod.string(),
   "company": zod.string().nullish(),
   "slackChannel": zod.string(),
+  "slackWorkspaceId": zod.string().nullish(),
+  "slackBotToken": zod.string().nullish(),
   "mode": zod.enum(['draft', 'auto']),
   "lemlistApiKey": zod.string().nullish(),
   "n8nWebhookUrl": zod.string().nullish(),
-  "isActive": zod.boolean().optional(),
+  "isActive": zod.boolean(),
   "createdAt": zod.coerce.date()
 })
 
@@ -70,10 +76,12 @@ export const GetClientResponse = zod.object({
   "name": zod.string(),
   "company": zod.string().nullish(),
   "slackChannel": zod.string(),
+  "slackWorkspaceId": zod.string().nullish(),
+  "slackBotToken": zod.string().nullish(),
   "mode": zod.enum(['draft', 'auto']),
   "lemlistApiKey": zod.string().nullish(),
   "n8nWebhookUrl": zod.string().nullish(),
-  "isActive": zod.boolean().optional(),
+  "isActive": zod.boolean(),
   "createdAt": zod.coerce.date()
 })
 
@@ -89,6 +97,8 @@ export const UpdateClientBody = zod.object({
   "name": zod.string().optional(),
   "company": zod.string().optional(),
   "slackChannel": zod.string().optional(),
+  "slackWorkspaceId": zod.string().optional(),
+  "slackBotToken": zod.string().optional(),
   "mode": zod.enum(['draft', 'auto']).optional(),
   "lemlistApiKey": zod.string().optional(),
   "n8nWebhookUrl": zod.string().optional(),
@@ -100,10 +110,12 @@ export const UpdateClientResponse = zod.object({
   "name": zod.string(),
   "company": zod.string().nullish(),
   "slackChannel": zod.string(),
+  "slackWorkspaceId": zod.string().nullish(),
+  "slackBotToken": zod.string().nullish(),
   "mode": zod.enum(['draft', 'auto']),
   "lemlistApiKey": zod.string().nullish(),
   "n8nWebhookUrl": zod.string().nullish(),
-  "isActive": zod.boolean().optional(),
+  "isActive": zod.boolean(),
   "createdAt": zod.coerce.date()
 })
 
@@ -119,6 +131,118 @@ export const DeleteClientResponse = zod.void()
 
 
 /**
+ * @summary List all personas
+ */
+export const ListPersonasQueryParams = zod.object({
+  "clientId": zod.coerce.number().optional()
+})
+
+export const ListPersonasResponseItem = zod.object({
+  "id": zod.number(),
+  "clientId": zod.number(),
+  "name": zod.string(),
+  "productDescription": zod.string(),
+  "targetAudience": zod.string(),
+  "toneOfVoice": zod.string(),
+  "commonObjections": zod.string().nullish(),
+  "cta": zod.string(),
+  "qualificationRules": zod.string().nullish(),
+  "createdAt": zod.coerce.date()
+})
+export const ListPersonasResponse = zod.array(ListPersonasResponseItem)
+
+
+/**
+ * @summary Create a persona
+ */
+export const CreatePersonaBody = zod.object({
+  "clientId": zod.number(),
+  "name": zod.string(),
+  "productDescription": zod.string(),
+  "targetAudience": zod.string(),
+  "toneOfVoice": zod.string(),
+  "commonObjections": zod.string().optional(),
+  "cta": zod.string(),
+  "qualificationRules": zod.string().optional()
+})
+
+export const CreatePersonaResponse = zod.object({
+  "id": zod.number(),
+  "clientId": zod.number(),
+  "name": zod.string(),
+  "productDescription": zod.string(),
+  "targetAudience": zod.string(),
+  "toneOfVoice": zod.string(),
+  "commonObjections": zod.string().nullish(),
+  "cta": zod.string(),
+  "qualificationRules": zod.string().nullish(),
+  "createdAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Get a persona
+ */
+export const GetPersonaParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const GetPersonaResponse = zod.object({
+  "id": zod.number(),
+  "clientId": zod.number(),
+  "name": zod.string(),
+  "productDescription": zod.string(),
+  "targetAudience": zod.string(),
+  "toneOfVoice": zod.string(),
+  "commonObjections": zod.string().nullish(),
+  "cta": zod.string(),
+  "qualificationRules": zod.string().nullish(),
+  "createdAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Update a persona
+ */
+export const UpdatePersonaParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const UpdatePersonaBody = zod.object({
+  "name": zod.string().optional(),
+  "productDescription": zod.string().optional(),
+  "targetAudience": zod.string().optional(),
+  "toneOfVoice": zod.string().optional(),
+  "commonObjections": zod.string().optional(),
+  "cta": zod.string().optional(),
+  "qualificationRules": zod.string().optional()
+})
+
+export const UpdatePersonaResponse = zod.object({
+  "id": zod.number(),
+  "clientId": zod.number(),
+  "name": zod.string(),
+  "productDescription": zod.string(),
+  "targetAudience": zod.string(),
+  "toneOfVoice": zod.string(),
+  "commonObjections": zod.string().nullish(),
+  "cta": zod.string(),
+  "qualificationRules": zod.string().nullish(),
+  "createdAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Delete a persona
+ */
+export const DeletePersonaParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const DeletePersonaResponse = zod.void()
+
+
+/**
  * @summary List all campaigns
  */
 export const ListCampaignsQueryParams = zod.object({
@@ -128,12 +252,14 @@ export const ListCampaignsQueryParams = zod.object({
 export const ListCampaignsResponseItem = zod.object({
   "id": zod.number(),
   "clientId": zod.number(),
+  "personaId": zod.number().nullish(),
   "name": zod.string(),
   "lemlistCampaignId": zod.string(),
-  "persona": zod.string(),
-  "systemPrompt": zod.string().nullish(),
-  "isActive": zod.boolean().optional(),
-  "replyCount": zod.number().optional(),
+  "tone": zod.string().nullish(),
+  "replyRules": zod.string().nullish(),
+  "regionRules": zod.string().nullish(),
+  "isActive": zod.boolean(),
+  "replyCount": zod.number(),
   "createdAt": zod.coerce.date()
 })
 export const ListCampaignsResponse = zod.array(ListCampaignsResponseItem)
@@ -144,21 +270,25 @@ export const ListCampaignsResponse = zod.array(ListCampaignsResponseItem)
  */
 export const CreateCampaignBody = zod.object({
   "clientId": zod.number(),
+  "personaId": zod.number().optional(),
   "name": zod.string(),
   "lemlistCampaignId": zod.string(),
-  "persona": zod.string(),
-  "systemPrompt": zod.string().optional()
+  "tone": zod.string().optional(),
+  "replyRules": zod.string().optional(),
+  "regionRules": zod.string().optional()
 })
 
 export const CreateCampaignResponse = zod.object({
   "id": zod.number(),
   "clientId": zod.number(),
+  "personaId": zod.number().nullish(),
   "name": zod.string(),
   "lemlistCampaignId": zod.string(),
-  "persona": zod.string(),
-  "systemPrompt": zod.string().nullish(),
-  "isActive": zod.boolean().optional(),
-  "replyCount": zod.number().optional(),
+  "tone": zod.string().nullish(),
+  "replyRules": zod.string().nullish(),
+  "regionRules": zod.string().nullish(),
+  "isActive": zod.boolean(),
+  "replyCount": zod.number(),
   "createdAt": zod.coerce.date()
 })
 
@@ -173,12 +303,14 @@ export const GetCampaignParams = zod.object({
 export const GetCampaignResponse = zod.object({
   "id": zod.number(),
   "clientId": zod.number(),
+  "personaId": zod.number().nullish(),
   "name": zod.string(),
   "lemlistCampaignId": zod.string(),
-  "persona": zod.string(),
-  "systemPrompt": zod.string().nullish(),
-  "isActive": zod.boolean().optional(),
-  "replyCount": zod.number().optional(),
+  "tone": zod.string().nullish(),
+  "replyRules": zod.string().nullish(),
+  "regionRules": zod.string().nullish(),
+  "isActive": zod.boolean(),
+  "replyCount": zod.number(),
   "createdAt": zod.coerce.date()
 })
 
@@ -191,22 +323,26 @@ export const UpdateCampaignParams = zod.object({
 })
 
 export const UpdateCampaignBody = zod.object({
+  "personaId": zod.number().optional(),
   "name": zod.string().optional(),
   "lemlistCampaignId": zod.string().optional(),
-  "persona": zod.string().optional(),
-  "systemPrompt": zod.string().optional(),
+  "tone": zod.string().optional(),
+  "replyRules": zod.string().optional(),
+  "regionRules": zod.string().optional(),
   "isActive": zod.boolean().optional()
 })
 
 export const UpdateCampaignResponse = zod.object({
   "id": zod.number(),
   "clientId": zod.number(),
+  "personaId": zod.number().nullish(),
   "name": zod.string(),
   "lemlistCampaignId": zod.string(),
-  "persona": zod.string(),
-  "systemPrompt": zod.string().nullish(),
-  "isActive": zod.boolean().optional(),
-  "replyCount": zod.number().optional(),
+  "tone": zod.string().nullish(),
+  "replyRules": zod.string().nullish(),
+  "regionRules": zod.string().nullish(),
+  "isActive": zod.boolean(),
+  "replyCount": zod.number(),
   "createdAt": zod.coerce.date()
 })
 
@@ -219,6 +355,24 @@ export const DeleteCampaignParams = zod.object({
 })
 
 export const DeleteCampaignResponse = zod.void()
+
+
+/**
+ * @summary Per-campaign reply and draft statistics
+ */
+export const GetCampaignStatsParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const GetCampaignStatsResponse = zod.object({
+  "campaignId": zod.number(),
+  "totalReplies": zod.number(),
+  "sent": zod.number(),
+  "edited": zod.number(),
+  "discarded": zod.number(),
+  "pending": zod.number(),
+  "avgResponseTimeMs": zod.number().nullish()
+})
 
 
 /**
@@ -236,6 +390,8 @@ export const ListDraftsResponseItem = zod.object({
   "prospectEmail": zod.string(),
   "prospectName": zod.string(),
   "prospectCompany": zod.string().nullish(),
+  "prospectCountry": zod.string().nullish(),
+  "prospectRole": zod.string().nullish(),
   "conversationSnippet": zod.string().nullish(),
   "replyText": zod.string(),
   "editedReplyText": zod.string().nullish(),
@@ -257,6 +413,8 @@ export const ListPendingDraftsResponseItem = zod.object({
   "prospectEmail": zod.string(),
   "prospectName": zod.string(),
   "prospectCompany": zod.string().nullish(),
+  "prospectCountry": zod.string().nullish(),
+  "prospectRole": zod.string().nullish(),
   "conversationSnippet": zod.string().nullish(),
   "replyText": zod.string(),
   "editedReplyText": zod.string().nullish(),
@@ -282,6 +440,8 @@ export const GetDraftResponse = zod.object({
   "prospectEmail": zod.string(),
   "prospectName": zod.string(),
   "prospectCompany": zod.string().nullish(),
+  "prospectCountry": zod.string().nullish(),
+  "prospectRole": zod.string().nullish(),
   "conversationSnippet": zod.string().nullish(),
   "replyText": zod.string(),
   "editedReplyText": zod.string().nullish(),
@@ -311,6 +471,8 @@ export const ApplyDraftActionResponse = zod.object({
   "prospectEmail": zod.string(),
   "prospectName": zod.string(),
   "prospectCompany": zod.string().nullish(),
+  "prospectCountry": zod.string().nullish(),
+  "prospectRole": zod.string().nullish(),
   "conversationSnippet": zod.string().nullish(),
   "replyText": zod.string(),
   "editedReplyText": zod.string().nullish(),
@@ -329,6 +491,7 @@ export const listLogsQueryLimitDefault = 50;
 export const ListLogsQueryParams = zod.object({
   "clientId": zod.coerce.number().optional(),
   "level": zod.enum(['info', 'warning', 'error']).optional(),
+  "source": zod.enum(['lemlist', 'n8n', 'claude', 'slack', 'system']).optional(),
   "limit": zod.coerce.number().default(listLogsQueryLimitDefault)
 })
 
@@ -337,9 +500,12 @@ export const ListLogsResponseItem = zod.object({
   "clientId": zod.number().nullish(),
   "campaignId": zod.number().nullish(),
   "draftId": zod.number().nullish(),
+  "leadId": zod.string().nullish(),
   "level": zod.enum(['info', 'warning', 'error']),
   "message": zod.string(),
   "source": zod.enum(['lemlist', 'n8n', 'claude', 'slack', 'system']),
+  "generatedDraft": zod.string().nullish(),
+  "finalStatus": zod.union([zod.literal('draft'),zod.literal('sent'),zod.literal('edited'),zod.literal('discarded'),zod.literal(null)]).nullish(),
   "metadata": zod.string().nullish(),
   "createdAt": zod.coerce.date()
 })
@@ -358,22 +524,30 @@ export const GetLogResponse = zod.object({
   "clientId": zod.number().nullish(),
   "campaignId": zod.number().nullish(),
   "draftId": zod.number().nullish(),
+  "leadId": zod.string().nullish(),
   "level": zod.enum(['info', 'warning', 'error']),
   "message": zod.string(),
   "source": zod.enum(['lemlist', 'n8n', 'claude', 'slack', 'system']),
+  "generatedDraft": zod.string().nullish(),
+  "finalStatus": zod.union([zod.literal('draft'),zod.literal('sent'),zod.literal('edited'),zod.literal('discarded'),zod.literal(null)]).nullish(),
   "metadata": zod.string().nullish(),
   "createdAt": zod.coerce.date()
 })
 
 
 /**
- * @summary Get the operator setup checklist
+ * @summary Get setup checklist items
  */
+export const ListSetupItemsQueryParams = zod.object({
+  "checklistType": zod.enum(['client_onboarding', 'internal_setup']).optional()
+})
+
 export const ListSetupItemsResponseItem = zod.object({
   "id": zod.number(),
   "title": zod.string(),
   "description": zod.string(),
   "category": zod.enum(['infrastructure', 'integrations', 'configuration', 'testing']),
+  "checklistType": zod.enum(['client_onboarding', 'internal_setup']),
   "isCompleted": zod.boolean(),
   "completedAt": zod.coerce.date().nullish()
 })
@@ -396,6 +570,7 @@ export const UpdateSetupItemResponse = zod.object({
   "title": zod.string(),
   "description": zod.string(),
   "category": zod.enum(['infrastructure', 'integrations', 'configuration', 'testing']),
+  "checklistType": zod.enum(['client_onboarding', 'internal_setup']),
   "isCompleted": zod.boolean(),
   "completedAt": zod.coerce.date().nullish()
 })
@@ -407,6 +582,7 @@ export const UpdateSetupItemResponse = zod.object({
 export const GetDashboardStatsResponse = zod.object({
   "totalClients": zod.number(),
   "activeCampaigns": zod.number(),
+  "totalPersonas": zod.number(),
   "pendingDrafts": zod.number(),
   "totalDraftsSent": zod.number(),
   "totalDraftsDiscarded": zod.number(),
@@ -434,23 +610,5 @@ export const ListActivityResponseItem = zod.object({
   "createdAt": zod.coerce.date()
 })
 export const ListActivityResponse = zod.array(ListActivityResponseItem)
-
-
-/**
- * @summary Per-campaign reply and draft statistics
- */
-export const GetCampaignStatsParams = zod.object({
-  "id": zod.coerce.number()
-})
-
-export const GetCampaignStatsResponse = zod.object({
-  "campaignId": zod.number(),
-  "totalReplies": zod.number(),
-  "sent": zod.number(),
-  "edited": zod.number(),
-  "discarded": zod.number(),
-  "pending": zod.number(),
-  "avgResponseTimeMs": zod.number().nullish()
-})
 
 
