@@ -7,6 +7,9 @@ import draftsRouter from "./drafts";
 import logsRouter from "./logs";
 import setupRouter from "./setup";
 import dashboardRouter from "./dashboard";
+import integrationsRouter from "./integrations";
+import slackRouter from "./slack";
+import webhooksRouter from "./webhooks";
 
 const router: IRouter = Router();
 
@@ -18,5 +21,8 @@ router.use(draftsRouter);
 router.use(logsRouter);
 router.use(setupRouter);
 router.use(dashboardRouter);
+router.use(integrationsRouter);
+router.use(slackRouter);
+router.use(webhooksRouter);
 
 export default router;

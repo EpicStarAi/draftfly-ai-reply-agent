@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
@@ -19,88 +19,49 @@ import {
   MessageSquare,
   Link2,
   Shield,
+  Loader2,
 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
-type ConnectionStatus = "connected" | "warning" | "disconnected";
+type ConnectionStatus = "connected" | "warning" | "disconnected" | "unconfigured";
 
-interface IntegrationConfig {
-  id: string;
-  name: string;
-  description: string;
-  icon: React.ElementType;
-  status: ConnectionStatus;
-  credentialLabel: string;
-  credentialValue: string;
-  lastTested: string;
-  lastResult: string;
-  lastResultOk: boolean;
-  note?: string;
+interface ServerIntegrationStatus {
+  slack: { configured: boolean; hasToken: boolean; hasSigningSecret: boolean; appId: string | null };
+  lemlist: { configured: boolean; hasApiKey: boolean };
+  claude: { configured: boolean; hasApiKey: boolean };
+  n8n: { configured: boolean; webhookUrl: string | null };
+  database: { configured: boolean };
+  appBaseUrl: string | null;
 }
 
-const integrations: IntegrationConfig[] = [
-  {
-    id: "lemlist",
-    name: "Lemlist API",
-    description: "Campaign webhooks, conversation history, and reply delivery",
-    icon: Link2,
-    status: "connected",
-    credentialLabel: "API Key",
-    credentialValue: "lem_api_placeholder_xxxxxxxxxxxx",
-    lastTested: "2 min ago",
-    lastResult: "200 OK — campaigns listed successfully",
-    lastResultOk: true,
-  },
-  {
-    id: "slack",
-    name: "Slack App",
-    description: "Bot token for posting drafts and receiving block_action callbacks",
-    icon: MessageSquare,
-    status: "connected",
-    credentialLabel: "Bot Token",
-    credentialValue: "xoxb-mock-bot-token-placeholder-0000000",
-    lastTested: "4 min ago",
-    lastResult: "auth.test passed — bot identity verified",
-    lastResultOk: true,
-  },
-  {
-    id: "claude",
-    name: "Claude API",
-    description: "Anthropic claude-3-5-sonnet for AI reply generation",
-    icon: Bot,
-    status: "connected",
-    credentialLabel: "API Key",
-    credentialValue: "sk-ant-placeholder-xxxxxxxxxxxxxxxxxxxx",
-    lastTested: "8 min ago",
-    lastResult: "Completion test passed — 74 tokens, 11ms",
-    lastResultOk: true,
-  },
-  {
-    id: "n8n",
-    name: "n8n Webhook",
-    description: "Self-hosted n8n orchestration layer on Hetzner VPS behind Caddy",
-    icon: Zap,
-    status: "warning",
-    credentialLabel: "Webhook Base URL",
-    credentialValue: "https://n8n.draftfly.internal",
-    lastTested: "12 min ago",
-    lastResult: "Response time 4200ms — above 3000ms threshold",
-    lastResultOk: false,
-    note: "High latency detected. Check n8n instance load and Caddy proxy settings.",
-  },
-  {
-    id: "database",
-    name: "Database / Config Layer",
-    description: "PostgreSQL — clients, campaigns, personas, drafts, logs",
-    icon: Database,
-    status: "connected",
-    credentialLabel: "Connection String",
-    credentialValue: "postgresql://user:••••••@localhost:5432/draftfly",
-    lastTested: "1 min ago",
-    lastResult: "Query latency 4ms — all tables reachable",
-    lastResultOk: true,
-  },
-];
+const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
+
+async function fetchStatus(): Promise<ServerIntegrationStatus | null> {
+  try {
+    const res = await fetch(`${BASE}/api/integrations/status`);
+    if (!res.ok) return null;
+    return (await res.json()) as ServerIntegrationStatus;
+  } catch {
+    return null;
+  }
+}
+
+async function testService(service: string, body?: Record<string, unknown>): Promise<{ ok: boolean; error?: string; mock?: boolean; tokens?: number }> {
+  try {
+    const res = await fetch(`${BASE}/api/integrations/test/${service}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body ?? {}),
+    });
+    return (await res.json()) as { ok: boolean; error?: string; mock?: boolean; tokens?: number };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Network error" };
+  }
+}
+
+function statusFromServer(configured: boolean): ConnectionStatus {
+  return configured ? "connected" : "unconfigured";
+}
 
 function StatusBadge({ status }: { status: ConnectionStatus }) {
   if (status === "connected") return (
@@ -113,6 +74,11 @@ function StatusBadge({ status }: { status: ConnectionStatus }) {
       <AlertTriangle className="h-3 w-3" /> Warning
     </Badge>
   );
+  if (status === "unconfigured") return (
+    <Badge className="bg-amber-500/10 text-amber-400 border-amber-500/20 hover:bg-amber-500/10 font-normal gap-1 shrink-0">
+      <AlertTriangle className="h-3 w-3" /> Not Configured
+    </Badge>
+  );
   return (
     <Badge className="bg-muted text-muted-foreground border-border hover:bg-muted font-normal gap-1 shrink-0">
       <XCircle className="h-3 w-3" /> Disconnected
@@ -120,24 +86,43 @@ function StatusBadge({ status }: { status: ConnectionStatus }) {
   );
 }
 
-function IntegrationCard({ integration }: { integration: IntegrationConfig }) {
+interface CardConfig {
+  id: string;
+  name: string;
+  description: string;
+  icon: React.ElementType;
+  credentialLabel: string;
+  credentialPlaceholder: string;
+  secretEnvVar: string;
+  testFn: () => Promise<{ ok: boolean; error?: string; mock?: boolean; tokens?: number }>;
+}
+
+function IntegrationCard({
+  config,
+  status,
+}: {
+  config: CardConfig;
+  status: ConnectionStatus;
+}) {
   const [show, setShow] = useState(false);
   const [testing, setTesting] = useState(false);
-  const [tested, setTested] = useState(false);
+  const [testResult, setTestResult] = useState<{ ok: boolean; error?: string; mock?: boolean; tokens?: number; ts?: string } | null>(null);
 
-  function handleTest() {
+  async function handleTest() {
     setTesting(true);
-    setTested(false);
-    setTimeout(() => {
-      setTesting(false);
-      setTested(true);
-    }, 1400);
+    setTestResult(null);
+    const result = await config.testFn();
+    setTesting(false);
+    setTestResult(result);
   }
 
-  const Icon = integration.icon;
+  const Icon = config.icon;
+  const effectiveStatus: ConnectionStatus = testResult
+    ? testResult.ok ? "connected" : "warning"
+    : status;
 
   return (
-    <Card data-testid={`integration-card-${integration.id}`}>
+    <Card data-testid={`integration-card-${config.id}`}>
       <CardHeader className="pb-3">
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-center gap-2.5">
@@ -145,66 +130,72 @@ function IntegrationCard({ integration }: { integration: IntegrationConfig }) {
               <Icon className="h-4 w-4 text-primary" />
             </div>
             <div>
-              <CardTitle className="text-sm font-semibold">{integration.name}</CardTitle>
-              <CardDescription className="text-xs mt-0.5">{integration.description}</CardDescription>
+              <CardTitle className="text-sm font-semibold">{config.name}</CardTitle>
+              <CardDescription className="text-xs mt-0.5">{config.description}</CardDescription>
             </div>
           </div>
-          <StatusBadge status={integration.status} />
+          <StatusBadge status={effectiveStatus} />
         </div>
       </CardHeader>
 
       <CardContent className="space-y-3">
-        {/* Credential field */}
+        {/* Env var name */}
         <div className="space-y-1.5">
-          <Label className="text-xs text-muted-foreground uppercase tracking-wider">{integration.credentialLabel}</Label>
+          <Label className="text-xs text-muted-foreground uppercase tracking-wider">{config.credentialLabel}</Label>
           <div className="relative">
             <Input
-              value={show ? integration.credentialValue : integration.credentialValue.replace(/[^:@./\s-]/g, "•")}
+              value={show ? config.secretEnvVar : config.credentialPlaceholder}
               readOnly
               className="font-mono text-xs pr-10 bg-background/60 border-border"
-              data-testid={`input-cred-${integration.id}`}
+              data-testid={`input-cred-${config.id}`}
             />
             <button
               type="button"
               onClick={() => setShow((s) => !s)}
               className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-              data-testid={`toggle-cred-${integration.id}`}
             >
               {show ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
             </button>
           </div>
+          <p className="text-[10px] text-muted-foreground font-mono">Set via Replit Secrets: <span className="text-foreground">{config.secretEnvVar}</span></p>
         </div>
 
-        {/* Warning note */}
-        {integration.note && (
+        {/* Warning when not configured */}
+        {status === "unconfigured" && (
           <div className="flex items-start gap-2 rounded-md bg-amber-500/5 border border-amber-500/20 px-3 py-2 text-xs text-amber-400">
             <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
-            <p>{integration.note}</p>
+            <p>Secret not set. Add <span className="font-mono">{config.secretEnvVar}</span> in Replit Secrets to enable this integration. Mock mode active.</p>
           </div>
         )}
 
         <Separator />
 
-        {/* Last test result + test button */}
-        <div className="flex items-center justify-between gap-3">
-          <div className="min-w-0">
-            <p className="text-xs text-muted-foreground">Last tested: {integration.lastTested}</p>
-            <p className={`text-xs font-mono mt-0.5 truncate ${tested ? (integration.lastResultOk ? "text-emerald-400" : "text-amber-400") : integration.lastResultOk ? "text-emerald-400" : "text-amber-400"}`}>
-              {tested
-                ? (integration.lastResultOk ? integration.lastResult : integration.lastResult)
-                : integration.lastResult}
-            </p>
+        {/* Test result */}
+        {testResult && (
+          <div className={`rounded-md px-3 py-2 text-xs border ${testResult.ok ? "bg-emerald-500/5 border-emerald-500/20 text-emerald-400" : "bg-red-500/5 border-red-500/20 text-red-400"}`}>
+            {testResult.ok ? (
+              <span>
+                {testResult.mock ? "✓ Mock test passed (no secret configured)" : "✓ Connection verified"}
+                {testResult.tokens != null ? ` — ${testResult.tokens} tokens used` : ""}
+              </span>
+            ) : (
+              <span>✗ {testResult.error ?? "Connection failed"}</span>
+            )}
           </div>
+        )}
+
+        {/* Test button */}
+        <div className="flex justify-end">
           <Button
             variant="outline"
             size="sm"
             onClick={handleTest}
             disabled={testing}
-            className="shrink-0 text-xs h-7"
-            data-testid={`button-test-${integration.id}`}
+            className="text-xs h-7"
+            data-testid={`button-test-${config.id}`}
           >
-            <RefreshCw className={`h-3 w-3 mr-1.5 ${testing ? "animate-spin" : ""}`} />
-            {testing ? "Testing…" : tested ? "Re-test" : "Test"}
+            {testing ? <Loader2 className="h-3 w-3 mr-1.5 animate-spin" /> : <RefreshCw className="h-3 w-3 mr-1.5" />}
+            {testing ? "Testing…" : testResult ? "Re-test" : "Test Connection"}
           </Button>
         </div>
       </CardContent>
@@ -213,6 +204,94 @@ function IntegrationCard({ integration }: { integration: IntegrationConfig }) {
 }
 
 export default function SettingsPage() {
+  const [serverStatus, setServerStatus] = useState<ServerIntegrationStatus | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetchStatus().then((s) => {
+      setServerStatus(s);
+      setLoading(false);
+    });
+  }, []);
+
+  const cards: CardConfig[] = [
+    {
+      id: "lemlist",
+      name: "Lemlist API",
+      description: "Campaign webhooks, conversation history, and reply delivery",
+      icon: Link2,
+      credentialLabel: "API Key",
+      credentialPlaceholder: "lem_api_••••••••••••••••••••••••••••",
+      secretEnvVar: "LEMLIST_API_KEY",
+      testFn: () => testService("lemlist"),
+    },
+    {
+      id: "slack",
+      name: "Slack App",
+      description: "Bot token for posting drafts and handling block_action callbacks",
+      icon: MessageSquare,
+      credentialLabel: "Bot Token",
+      credentialPlaceholder: "xoxb-••••••••••••••••••••••••••••••",
+      secretEnvVar: "SLACK_BOT_TOKEN",
+      testFn: () => testService("slack", { channelId: "C0000000000" }),
+    },
+    {
+      id: "claude",
+      name: "Claude API (Anthropic)",
+      description: "claude-3-5-sonnet for AI reply draft generation",
+      icon: Bot,
+      credentialLabel: "API Key",
+      credentialPlaceholder: "sk-ant-••••••••••••••••••••••••••••••",
+      secretEnvVar: "ANTHROPIC_API_KEY",
+      testFn: () => testService("claude"),
+    },
+    {
+      id: "n8n",
+      name: "n8n Webhook",
+      description: "Self-hosted n8n orchestration layer — Lemlist → Claude → Slack pipeline",
+      icon: Zap,
+      credentialLabel: "Webhook Base URL",
+      credentialPlaceholder: "https://n8n.your-domain.internal",
+      secretEnvVar: "N8N_WEBHOOK_URL",
+      testFn: async () => {
+        const url = serverStatus?.n8n?.webhookUrl;
+        if (!url) return { ok: true, mock: true };
+        try {
+          const res = await fetch(`${url}/healthz`, { signal: AbortSignal.timeout(5000) });
+          return { ok: res.ok };
+        } catch (err) {
+          return { ok: false, error: err instanceof Error ? err.message : "Unreachable" };
+        }
+      },
+    },
+    {
+      id: "database",
+      name: "Database / Config Layer",
+      description: "PostgreSQL — clients, campaigns, personas, drafts, logs",
+      icon: Database,
+      credentialLabel: "Connection String",
+      credentialPlaceholder: "postgresql://user:••••••@host:5432/draftfly",
+      secretEnvVar: "DATABASE_URL",
+      testFn: () => testService("database"),
+    },
+  ];
+
+  function statusFor(id: string): ConnectionStatus {
+    if (!serverStatus) return "unconfigured";
+    switch (id) {
+      case "lemlist": return statusFromServer(serverStatus.lemlist.configured);
+      case "slack": return statusFromServer(serverStatus.slack.configured);
+      case "claude": return statusFromServer(serverStatus.claude.configured);
+      case "n8n": return statusFromServer(serverStatus.n8n.configured);
+      case "database": return statusFromServer(serverStatus.database.configured);
+      default: return "unconfigured";
+    }
+  }
+
+  const configuredCount = serverStatus
+    ? [serverStatus.slack.configured, serverStatus.lemlist.configured, serverStatus.claude.configured, serverStatus.database.configured].filter(Boolean).length
+    : 0;
+
   return (
     <div className="space-y-6 max-w-4xl">
       <div>
@@ -231,15 +310,19 @@ export default function SettingsPage() {
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div className="space-y-1.5">
               <Label className="text-xs text-muted-foreground uppercase tracking-wider">API Version</Label>
-              <Input value="v0.2.0" disabled className="bg-muted/50 font-mono text-xs" data-testid="input-api-version" />
+              <Input value="v0.2.0" disabled className="bg-muted/50 font-mono text-xs" />
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs text-muted-foreground uppercase tracking-wider">Environment</Label>
-              <Input value="Beta" disabled className="bg-muted/50 text-xs" data-testid="input-environment" />
+              <Input value="Beta" disabled className="bg-muted/50 text-xs" />
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground uppercase tracking-wider">Release</Label>
-              <Input value="MVP — Draft Mode only" disabled className="bg-muted/50 text-xs" data-testid="input-release" />
+              <Label className="text-xs text-muted-foreground uppercase tracking-wider">App Base URL</Label>
+              <Input
+                value={serverStatus?.appBaseUrl ?? (loading ? "Loading…" : "Not configured")}
+                disabled
+                className="bg-muted/50 font-mono text-xs"
+              />
             </div>
           </div>
         </CardContent>
@@ -256,7 +339,7 @@ export default function SettingsPage() {
             <div className="space-y-1.5">
               <Label className="text-xs text-muted-foreground uppercase tracking-wider">Default Client Mode</Label>
               <Select defaultValue="draft" disabled>
-                <SelectTrigger data-testid="select-default-mode">
+                <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -267,14 +350,14 @@ export default function SettingsPage() {
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs text-muted-foreground uppercase tracking-wider">Auto Mode</Label>
-              <Input value="Disabled for all beta clients" disabled className="bg-muted/50 text-xs" data-testid="input-auto-mode" />
+              <Input value="Disabled for all beta clients" disabled className="bg-muted/50 text-xs" />
             </div>
           </div>
           <div className="rounded-md bg-muted/20 border border-border px-3 py-2.5 text-xs text-muted-foreground flex items-start gap-2">
             <Shield className="h-3.5 w-3.5 shrink-0 mt-0.5 text-primary" />
             <div>
-              <span className="text-foreground font-medium">Draft Mode is default and recommended for MVP. </span>
-              Every AI-generated reply requires operator approval via Slack before it is sent to the prospect. Auto Mode will be enabled selectively once quality benchmarks are met.
+              <span className="text-foreground font-medium">Draft Mode is default and required for beta. </span>
+              Every AI-generated reply requires operator approval via Slack before it is sent. Auto Mode will be enabled per-client once quality benchmarks are confirmed.
             </div>
           </div>
         </CardContent>
@@ -282,13 +365,35 @@ export default function SettingsPage() {
 
       {/* Integration Cards */}
       <div>
-        <div className="mb-4">
-          <h2 className="text-base font-semibold">Integration Status</h2>
-          <p className="text-sm text-muted-foreground mt-0.5">Placeholder credentials only. No real API keys are stored in this prototype.</p>
+        <div className="mb-4 flex items-center justify-between">
+          <div>
+            <h2 className="text-base font-semibold">Integration Status</h2>
+            <p className="text-sm text-muted-foreground mt-0.5">
+              {loading ? "Loading status from server…" : `${configuredCount}/4 integrations configured via Replit Secrets`}
+            </p>
+          </div>
+          {loading && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
         </div>
+
+        {/* Setup instructions */}
+        {!loading && configuredCount < 4 && (
+          <div className="mb-4 rounded-md border border-primary/20 bg-primary/5 px-4 py-3 text-xs text-muted-foreground flex items-start gap-2.5">
+            <Shield className="h-3.5 w-3.5 shrink-0 mt-0.5 text-primary" />
+            <div>
+              <p className="font-medium text-foreground mb-1">To activate real integrations:</p>
+              <ol className="space-y-0.5 list-decimal list-inside">
+                <li>Open <span className="font-medium text-foreground">Replit Secrets</span> (lock icon in the sidebar)</li>
+                <li>Add each secret key listed on the integration cards below</li>
+                <li>Restart the API server workflow to pick up the new secrets</li>
+                <li>Click <span className="font-medium text-foreground">Test Connection</span> to verify</li>
+              </ol>
+            </div>
+          </div>
+        )}
+
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {integrations.map((integration) => (
-            <IntegrationCard key={integration.id} integration={integration} />
+          {cards.map((card) => (
+            <IntegrationCard key={card.id} config={card} status={statusFor(card.id)} />
           ))}
         </div>
       </div>
