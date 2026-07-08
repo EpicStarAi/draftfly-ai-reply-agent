@@ -1,7 +1,8 @@
-# See https://docs.github.com/en/get-started/getting-started-with-git/ignoring-files for more about ignoring files.
+# See https://docs.github.com/en/get-started/getting-started-with-git/ignoring-files
 
 # compiled output
 dist
+build
 tmp
 out-tsc
 *.tsbuildinfo
@@ -10,6 +11,20 @@ out-tsc
 
 # dependencies
 node_modules
+
+# environment / secrets — never commit these
+.env
+.env.local
+.env.*.local
+.replit-secrets
+
+# logs
+logs
+*.log
+npm-debug.log*
+yarn-error.log
+pnpm-debug.log*
+testem.log
 
 # IDEs and editors
 /.idea
@@ -32,18 +47,14 @@ node_modules
 /connect.lock
 /coverage
 /libpeerconnection.log
-npm-debug.log
-yarn-error.log
-testem.log
 /typings
 
 # System Files
 .DS_Store
 Thumbs.db
 
-.cursor/rules/nx-rules.mdc
-.github/instructions/nx.instructions.md
-
-# Replit
+# Replit internal
 .cache/
 .local/
+.cursor/rules/nx-rules.mdc
+.github/instructions/nx.instructions.md
