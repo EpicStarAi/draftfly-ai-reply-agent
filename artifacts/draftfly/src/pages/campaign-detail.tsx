@@ -1,4 +1,4 @@
-import { useGetCampaign, useUpdateCampaign, useGetCampaignStats, getGetCampaignQueryKey } from "@workspace/api-client-react";
+import { useGetCampaign, useUpdateCampaign, useGetCampaignStats, getGetCampaignQueryKey, getGetCampaignStatsQueryKey } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useParams, Link } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -15,7 +15,7 @@ export default function CampaignDetail() {
   const campaignId = parseInt(id || "0", 10);
   
   const { data: campaign, isLoading } = useGetCampaign(campaignId, { query: { enabled: !!campaignId, queryKey: getGetCampaignQueryKey(campaignId) } });
-  const { data: stats } = useGetCampaignStats(campaignId, { query: { enabled: !!campaignId } });
+  const { data: stats } = useGetCampaignStats(campaignId, { query: { enabled: !!campaignId, queryKey: getGetCampaignStatsQueryKey(campaignId) } });
   const updateCampaign = useUpdateCampaign();
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -23,8 +23,6 @@ export default function CampaignDetail() {
   const [formData, setFormData] = useState({
     name: "",
     lemlistCampaignId: "",
-    persona: "",
-    systemPrompt: ""
   });
 
   useEffect(() => {
@@ -32,8 +30,6 @@ export default function CampaignDetail() {
       setFormData({
         name: campaign.name,
         lemlistCampaignId: campaign.lemlistCampaignId,
-        persona: campaign.persona,
-        systemPrompt: campaign.systemPrompt || ""
       });
     }
   }, [campaign]);
@@ -95,21 +91,16 @@ export default function CampaignDetail() {
                 </div>
                 
                 <div className="space-y-2">
-                  <Label htmlFor="persona">Mapped Persona</Label>
-                  <Input id="persona" data-testid="input-persona" required value={formData.persona} onChange={e => setFormData({ ...formData, persona: e.target.value })} />
-                  <p className="text-xs text-muted-foreground">The AI Persona used to generate replies for this campaign.</p>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="systemPrompt">Campaign Reply Rules (Optional)</Label>
-                  <Textarea 
-                    id="systemPrompt" 
-                    data-testid="input-system-prompt"
-                    className="min-h-[150px] font-mono text-xs" 
-                    placeholder="Specific instructions for replies in this campaign..."
-                    value={formData.systemPrompt} 
-                    onChange={e => setFormData({ ...formData, systemPrompt: e.target.value })} 
+                  <Label htmlFor="personaId">Mapped Persona ID</Label>
+                  <Input
+                    id="personaId"
+                    data-testid="input-persona"
+                    type="number"
+                    value={campaign.personaId ?? ""}
+                    disabled
+                    className="bg-muted/50 font-mono text-xs"
                   />
+                  <p className="text-xs text-muted-foreground">Persona assigned to this campaign. Edit via the Personas page.</p>
                 </div>
 
                 <div className="pt-2 flex justify-end">

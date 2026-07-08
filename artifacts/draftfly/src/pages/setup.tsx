@@ -91,7 +91,6 @@ export default function SetupPage() {
                       />
                       <div className="flex-1 space-y-1">
                         <Label 
-                          htmlFor={`item-${item.id}`} 
                           className={`text-sm font-medium leading-none cursor-pointer ${item.isCompleted ? 'line-through text-muted-foreground' : ''}`}
                         >
                           {item.title}

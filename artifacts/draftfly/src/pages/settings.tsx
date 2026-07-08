@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
+import { Switch } from "@/components/ui/switch";
 import {
   CheckCircle2,
   XCircle,
@@ -20,8 +21,12 @@ import {
   Link2,
   Shield,
   Loader2,
+  Moon,
+  Sun,
+  Palette,
 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useTheme } from "@/hooks/use-theme";
 
 type ConnectionStatus = "connected" | "warning" | "disconnected" | "unconfigured";
 
@@ -204,6 +209,7 @@ function IntegrationCard({
 }
 
 export default function SettingsPage() {
+  const { isDark, setTheme } = useTheme();
   const [serverStatus, setServerStatus] = useState<ServerIntegrationStatus | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -324,6 +330,73 @@ export default function SettingsPage() {
                 className="bg-muted/50 font-mono text-xs"
               />
             </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Appearance */}
+      <Card>
+        <CardHeader className="pb-3">
+          <div className="flex items-center gap-2">
+            <Palette className="h-4 w-4 text-primary" />
+            <CardTitle className="text-base">Appearance</CardTitle>
+          </div>
+          <CardDescription>Saved to this browser. Does not affect other sessions or users.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center justify-between gap-4 py-1">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-md border border-border bg-muted/40 flex items-center justify-center shrink-0">
+                {isDark ? <Moon className="h-4 w-4 text-primary" /> : <Sun className="h-4 w-4 text-primary" />}
+              </div>
+              <div>
+                <p className="text-sm font-medium">Dark Mode</p>
+                <p className="text-xs text-muted-foreground">
+                  {isDark ? "Dark theme active — operator/internal view" : "Light theme active — client-demo friendly"}
+                </p>
+              </div>
+            </div>
+            <Switch
+              checked={isDark}
+              onCheckedChange={(checked) => setTheme(checked ? "dark" : "light")}
+              data-testid="switch-dark-mode"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3 pt-1">
+            <button
+              type="button"
+              onClick={() => setTheme("light")}
+              className={`rounded-md border-2 p-3 text-left transition-all ${!isDark ? "border-primary bg-primary/5" : "border-border hover:border-border/80"}`}
+              data-testid="button-theme-light"
+            >
+              <div className="w-full h-10 rounded bg-white border border-slate-200 mb-2 flex items-end px-2 pb-1.5 gap-1 overflow-hidden">
+                <div className="w-1/3 h-full bg-slate-100 rounded-sm" />
+                <div className="flex-1 space-y-1">
+                  <div className="h-1.5 bg-slate-200 rounded-sm w-3/4" />
+                  <div className="h-1.5 bg-slate-200 rounded-sm w-1/2" />
+                </div>
+              </div>
+              <p className="text-xs font-medium">Light</p>
+              <p className="text-[10px] text-muted-foreground">Default — client-demo ready</p>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setTheme("dark")}
+              className={`rounded-md border-2 p-3 text-left transition-all ${isDark ? "border-primary bg-primary/5" : "border-border hover:border-border/80"}`}
+              data-testid="button-theme-dark"
+            >
+              <div className="w-full h-10 rounded bg-[#0A0A0F] border border-[#27272A] mb-2 flex items-end px-2 pb-1.5 gap-1 overflow-hidden">
+                <div className="w-1/3 h-full bg-[#111115] rounded-sm" />
+                <div className="flex-1 space-y-1">
+                  <div className="h-1.5 bg-[#27272A] rounded-sm w-3/4" />
+                  <div className="h-1.5 bg-[#27272A] rounded-sm w-1/2" />
+                </div>
+              </div>
+              <p className="text-xs font-medium">Dark</p>
+              <p className="text-[10px] text-muted-foreground">Operator/internal dashboard</p>
+            </button>
           </div>
         </CardContent>
       </Card>

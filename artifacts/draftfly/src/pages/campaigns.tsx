@@ -128,7 +128,7 @@ export default function CampaignsPage() {
                       {client ? <Link href={`/clients/${client.id}`} className="hover:underline">{client.name}</Link> : "Unknown"}
                     </td>
                     <td className="px-4 py-3 font-mono text-xs text-muted-foreground">{camp.lemlistCampaignId}</td>
-                    <td className="px-4 py-3">{camp.persona}</td>
+                    <td className="px-4 py-3 text-muted-foreground font-mono text-xs">{camp.personaId ?? "—"}</td>
                     <td className="px-4 py-3 text-right font-medium flex items-center justify-end gap-1">
                       {camp.replyCount || 0}
                       <MessageSquare className="h-3.5 w-3.5 text-muted-foreground ml-1" />
