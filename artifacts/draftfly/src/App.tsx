@@ -16,6 +16,7 @@ import CampaignDetail from "@/pages/campaign-detail";
 import Drafts from "@/pages/drafts";
 import DraftDetail from "@/pages/draft-detail";
 import SlackApproval from "@/pages/slack-approval";
+import SlackAppSetup from "@/pages/slack-app-setup";
 import Onboarding from "@/pages/onboarding";
 import InternalSetup from "@/pages/internal-setup";
 import Logs from "@/pages/logs";
@@ -44,6 +45,7 @@ function Router() {
         <Route path="/drafts" component={Drafts} />
         <Route path="/drafts/:id" component={DraftDetail} />
         <Route path="/slack-approval" component={SlackApproval} />
+        <Route path="/slack-app-setup" component={SlackAppSetup} />
         <Route path="/onboarding" component={Onboarding} />
         <Route path="/internal-setup" component={InternalSetup} />
         <Route path="/logs" component={Logs} />
