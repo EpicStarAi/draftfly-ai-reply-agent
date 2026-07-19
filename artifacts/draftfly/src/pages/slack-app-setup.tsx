@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -24,14 +24,6 @@ import {
   Clock,
 } from "lucide-react";
 
-const mockEventLogs = [
-  { id: 1, ts: "13:47:22", event: "block_actions", action: "draft_send", user: "U08SARAH01", channel: "#axiom-replies", result: "success", detail: "Reply sent to marcus.chen@acmetech.io" },
-  { id: 2, ts: "13:31:05", event: "block_actions", action: "draft_edit", user: "U08SARAH01", channel: "#axiom-replies", result: "success", detail: "Operator opened edit modal for tom.harris@growthcorp.io" },
-  { id: 3, ts: "13:29:11", event: "block_actions", action: "draft_send", user: "U08JAMES02", channel: "#northbridge-replies", result: "success", detail: "Reply sent to diana.ross@nexcloud.de" },
-  { id: 4, ts: "12:54:44", event: "block_actions", action: "draft_discard", user: "U08JAMES02", channel: "#northbridge-replies", result: "success", detail: "Draft discarded for james.wu@infracore.ae" },
-  { id: 5, ts: "12:11:03", event: "url_verification", action: "challenge", user: "—", channel: "—", result: "success", detail: "Slack verified webhook endpoint" },
-  { id: 6, ts: "11:58:30", event: "block_actions", action: "draft_send", user: "U08SARAH01", channel: "#axiom-replies", result: "error", detail: "Lemlist API timeout — retry scheduled" },
-];
 
 function StatusBadge({ status }: { status: "connected" | "warning" | "disconnected" }) {
   if (status === "connected") return (
@@ -88,7 +80,7 @@ export default function SlackAppSetup() {
       <div>
         <h1 className="text-2xl font-semibold tracking-tight" data-testid="text-title">Slack App Setup</h1>
         <p className="text-sm text-muted-foreground mt-1">
-          Configuration reference for the DraftFly Slack bot. All credentials are placeholders — no real keys are stored in this prototype.
+          Configuration reference for the DraftFly Slack bot. Set <span className="font-mono text-foreground">SLACK_BOT_TOKEN</span> and <span className="font-mono text-foreground">SLACK_SIGNING_SECRET</span> in Replit Secrets to activate.
         </p>
       </div>
 
@@ -98,8 +90,7 @@ export default function SlackAppSetup() {
         <div className="text-sm space-y-1">
           <p className="font-medium text-amber-400">MVP Safety Defaults</p>
           <ul className="text-muted-foreground space-y-0.5 text-xs list-none">
-            <li>— Draft Mode is default. Auto Mode is disabled for all beta clients.</li>
-            <li>— No real API keys or tokens in this prototype. Mock data only.</li>
+            <li>— Draft Mode is default. All replies require human approval before sending.</li>
             <li>— No direct LinkedIn integration. Lemlist handles LinkedIn and email campaign delivery.</li>
             <li>— Clients interact only through Slack. This dashboard is internal operator-only.</li>
           </ul>
@@ -151,28 +142,38 @@ export default function SlackAppSetup() {
               <CardTitle className="text-base flex items-center gap-2">
                 <Shield className="h-4 w-4 text-primary" /> Credentials
               </CardTitle>
-              <CardDescription>Placeholder values — never store real tokens here</CardDescription>
+              <CardDescription>Set these in Replit Secrets to activate Slack integration</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <MaskedInput
-                label="Bot Token"
-                value="xoxb-mock-bot-token-placeholder-0000000"
-                description="OAuth bot token used by n8n to post messages to client channels"
-              />
-              <MaskedInput
-                label="Signing Secret"
-                value="abc123signingsecretplaceholder9999"
-                description="Used to verify that incoming webhook payloads are from Slack"
-              />
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground uppercase tracking-wider">Bot Token</Label>
+                <Input
+                  value="Set SLACK_BOT_TOKEN in Replit Secrets"
+                  readOnly
+                  className="font-mono text-xs bg-background/60 border-border text-muted-foreground"
+                  data-testid="input-bot-token"
+                />
+                <p className="text-xs text-muted-foreground">OAuth bot token — used to post approval cards to client channels</p>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground uppercase tracking-wider">Signing Secret</Label>
+                <Input
+                  value="Set SLACK_SIGNING_SECRET in Replit Secrets"
+                  readOnly
+                  className="font-mono text-xs bg-background/60 border-border text-muted-foreground"
+                  data-testid="input-signing-secret"
+                />
+                <p className="text-xs text-muted-foreground">Used to verify incoming webhook payloads are from Slack</p>
+              </div>
               <div className="space-y-1.5">
                 <Label className="text-xs text-muted-foreground uppercase tracking-wider">Approval Channel ID</Label>
                 <Input
-                  value="C08AXIOM01 (#axiom-replies)"
+                  value="Set per-client in Clients → Slack Channel field (e.g. C0XXXXXXXX)"
                   readOnly
-                  className="font-mono text-xs bg-background/60 border-border"
+                  className="font-mono text-xs bg-background/60 border-border text-muted-foreground"
                   data-testid="input-approval-channel-id"
                 />
-                <p className="text-xs text-muted-foreground">Per-client channel ID where draft approval messages are posted</p>
+                <p className="text-xs text-muted-foreground">Per-client channel ID where draft approval cards are posted</p>
               </div>
             </CardContent>
           </Card>
@@ -331,46 +332,75 @@ export default function SlackAppSetup() {
           </Card>
 
           {/* Event Logs */}
-          <Card>
-            <CardHeader className="pb-3">
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-base flex items-center gap-2">
-                  <Activity className="h-4 w-4 text-primary" /> Slack Event Logs
-                </CardTitle>
-                <Badge variant="outline" className="text-xs font-normal">Live (mock)</Badge>
-              </div>
-              <CardDescription>Incoming Slack block_actions and event payloads</CardDescription>
-            </CardHeader>
-            <CardContent className="p-0">
-              <div className="divide-y divide-border">
-                {mockEventLogs.map((log) => (
-                  <div key={log.id} className="px-4 py-2.5 flex items-start gap-3 text-xs" data-testid={`slack-log-${log.id}`}>
-                    <span className="font-mono text-muted-foreground shrink-0 pt-0.5 flex items-center gap-1">
-                      <Clock className="h-3 w-3" /> {log.ts}
-                    </span>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-mono text-primary/80">{log.event}</span>
-                        <span className="text-muted-foreground">/</span>
-                        <span className="font-mono text-foreground/80">{log.action}</span>
-                        {log.channel !== "—" && (
-                          <span className="text-muted-foreground flex items-center gap-0.5">
-                            <Hash className="h-2.5 w-2.5" />{log.channel.replace("#", "")}
-                          </span>
-                        )}
-                        <span className={`ml-auto shrink-0 font-medium ${log.result === "success" ? "text-emerald-400" : "text-red-400"}`}>
-                          {log.result}
-                        </span>
-                      </div>
-                      <p className="text-muted-foreground mt-0.5 truncate">{log.detail}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
+          <SlackEventLogs />
         </div>
       </div>
     </div>
+  );
+}
+
+const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
+
+interface SlackLog {
+  id: number;
+  level: string;
+  message: string;
+  source: string | null;
+  createdAt: string;
+}
+
+function SlackEventLogs() {
+  const [slackLogs, setSlackLogs] = useState<SlackLog[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetch(`${BASE}/api/logs?source=slack&limit=20`)
+      .then((r) => r.ok ? r.json() as Promise<SlackLog[]> : Promise.resolve([]))
+      .then(setSlackLogs)
+      .catch(() => setSlackLogs([]))
+      .finally(() => setLoading(false));
+  }, []);
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <div className="flex items-center justify-between">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Activity className="h-4 w-4 text-primary" /> Slack Event Logs
+          </CardTitle>
+          <Badge variant="outline" className="text-xs font-normal">Live</Badge>
+        </div>
+        <CardDescription>Slack events from the real pipeline</CardDescription>
+      </CardHeader>
+      <CardContent className="p-0">
+        {loading ? (
+          <div className="px-4 py-6 text-center text-xs text-muted-foreground">Loading…</div>
+        ) : slackLogs.length === 0 ? (
+          <div className="px-4 py-6 text-center text-xs text-muted-foreground">
+            No Slack events yet. Run a test flow or connect Slack to see events here.
+          </div>
+        ) : (
+          <div className="divide-y divide-border">
+            {slackLogs.map((log) => (
+              <div key={log.id} className="px-4 py-2.5 flex items-start gap-3 text-xs">
+                <span className="font-mono text-muted-foreground shrink-0 pt-0.5 flex items-center gap-1">
+                  <Clock className="h-3 w-3" />
+                  {new Date(log.createdAt).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+                </span>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono text-primary/80">slack</span>
+                    <span className={`ml-auto shrink-0 font-medium ${log.level === "error" ? "text-red-400" : "text-emerald-400"}`}>
+                      {log.level}
+                    </span>
+                  </div>
+                  <p className="text-muted-foreground mt-0.5 truncate">{log.message}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }

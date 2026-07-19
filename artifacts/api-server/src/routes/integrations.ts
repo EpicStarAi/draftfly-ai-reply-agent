@@ -72,10 +72,19 @@ router.post("/integrations/test/database", async (_req, res): Promise<void> => {
   }
 });
 
-// GET /integrations/lemlist/campaigns — list Lemlist campaigns
+// GET /integrations/lemlist/campaigns — list real Lemlist campaigns
 router.get("/integrations/lemlist/campaigns", async (_req, res): Promise<void> => {
-  const campaigns = await getCampaigns();
-  res.json({ campaigns, mock: !isLemlistConfigured() });
+  if (!isLemlistConfigured()) {
+    res.status(503).json({ error: "LEMLIST_API_KEY is not configured" });
+    return;
+  }
+  try {
+    const campaigns = await getCampaigns();
+    res.json({ campaigns });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    res.status(500).json({ error: msg });
+  }
 });
 
 export default router;

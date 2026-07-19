@@ -8,7 +8,7 @@ export function isLemlistConfigured(): boolean {
 
 function getApiKey(): string {
   const key = process.env.LEMLIST_API_KEY;
-  if (!key) throw new Error("LEMLIST_API_KEY not configured");
+  if (!key) throw new Error("LEMLIST_API_KEY is not configured. Add it to Replit Secrets to enable Lemlist integration.");
   return key;
 }
 
@@ -35,7 +35,6 @@ export interface LemlistWebhookPayload {
   jobTitle?: string;
   replyText?: string;
   text?: string;
-  // raw passthrough
   [key: string]: unknown;
 }
 
@@ -54,9 +53,9 @@ async function lemlistFetch(path: string, options?: RequestInit): Promise<Respon
   });
 }
 
-export async function testConnection(): Promise<{ ok: boolean; error?: string; mock?: boolean }> {
+export async function testConnection(): Promise<{ ok: boolean; error?: string }> {
   if (!isLemlistConfigured()) {
-    return { ok: true, mock: true };
+    return { ok: false, error: "LEMLIST_API_KEY is not configured" };
   }
   try {
     const res = await lemlistFetch("/campaigns?limit=1");
@@ -72,48 +71,28 @@ export async function testConnection(): Promise<{ ok: boolean; error?: string; m
 
 export async function getCampaigns(): Promise<LemlistCampaign[]> {
   if (!isLemlistConfigured()) {
-    return MOCK_CAMPAIGNS;
+    throw new Error("LEMLIST_API_KEY is not configured. Add it to Replit Secrets to fetch campaigns.");
   }
-  try {
-    const res = await lemlistFetch("/campaigns");
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = await res.json() as { campaigns?: LemlistCampaign[] } | LemlistCampaign[];
-    return Array.isArray(data) ? data : (data.campaigns ?? []);
-  } catch (err) {
-    logger.error({ err }, "Failed to fetch Lemlist campaigns");
-    return MOCK_CAMPAIGNS;
-  }
+  const res = await lemlistFetch("/campaigns");
+  if (!res.ok) throw new Error(`Lemlist API error: HTTP ${res.status}`);
+  const data = await res.json() as { campaigns?: LemlistCampaign[] } | LemlistCampaign[];
+  return Array.isArray(data) ? data : (data.campaigns ?? []);
 }
 
 export async function sendReply(params: {
   leadId: string;
   campaignId: string;
   replyText: string;
-}): Promise<{ ok: boolean; error?: string; mock?: boolean }> {
+}): Promise<{ ok: boolean; error?: string }> {
   if (!isLemlistConfigured()) {
-    logger.info({ leadId: params.leadId }, "Lemlist not configured — mock send");
-    return { ok: true, mock: true };
+    throw new Error("LEMLIST_API_KEY is not configured. Add it to Replit Secrets to send replies.");
   }
-  try {
-    const res = await lemlistFetch(`/campaigns/${params.campaignId}/leads/${params.leadId}/reply`, {
-      method: "POST",
-      body: JSON.stringify({ text: params.replyText }),
-    });
-    if (res.ok) return { ok: true };
-    const body = await res.text();
-    return { ok: false, error: `HTTP ${res.status}: ${body}` };
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    logger.error({ err }, "Lemlist sendReply failed");
-    return { ok: false, error: msg };
-  }
+  const res = await lemlistFetch(`/campaigns/${params.campaignId}/leads/${params.leadId}/reply`, {
+    method: "POST",
+    body: JSON.stringify({ text: params.replyText }),
+  });
+  if (res.ok) return { ok: true };
+  const body = await res.text();
+  logger.error({ campaignId: params.campaignId, leadId: params.leadId }, `Lemlist sendReply failed: HTTP ${res.status}`);
+  return { ok: false, error: `HTTP ${res.status}: ${body}` };
 }
-
-// ─── Mock data fallback ────────────────────────────────────────────────────
-
-const MOCK_CAMPAIGNS: LemlistCampaign[] = [
-  { _id: "LEM-001", name: "SaaS Founders Outreach Q3", status: "active" },
-  { _id: "LEM-002", name: "VP Sales Sequence — US/UK", status: "active" },
-  { _id: "LEM-003", name: "DACH Enterprise Expansion", status: "active" },
-  { _id: "LEM-004", name: "Middle East VC Warm Intro", status: "paused" },
-];

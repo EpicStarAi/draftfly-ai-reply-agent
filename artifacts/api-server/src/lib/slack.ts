@@ -18,7 +18,7 @@ export function getSlackStatus(): { configured: boolean; appId: string | null; c
 
 function getClient(botToken?: string): WebClient {
   const token = botToken ?? process.env.SLACK_BOT_TOKEN;
-  if (!token) throw new Error("SLACK_BOT_TOKEN not configured");
+  if (!token) throw new Error("SLACK_BOT_TOKEN is not configured. Add it to Replit Secrets to enable Slack integration.");
   return new WebClient(token);
 }
 
@@ -48,8 +48,8 @@ export function verifySlackSignature(
 export function verifyIncomingRequest(rawBody: string, headers: Record<string, string | string[] | undefined>): boolean {
   const secret = process.env.SLACK_SIGNING_SECRET;
   if (!secret) {
-    logger.warn("SLACK_SIGNING_SECRET not set — skipping signature verification");
-    return true;
+    logger.warn("SLACK_SIGNING_SECRET not set — rejecting request");
+    return false;
   }
   const timestamp = String(headers["x-slack-request-timestamp"] ?? "");
   const signature = String(headers["x-slack-signature"] ?? "");
@@ -75,8 +75,7 @@ export interface ApprovalCardParams {
 
 export async function postApprovalCard(params: ApprovalCardParams): Promise<string | null> {
   if (!isSlackConfigured() && !params.botToken) {
-    logger.warn("Slack not configured — skipping approval card post (mock mode)");
-    return `mock-ts-${Date.now()}`;
+    throw new Error("Slack is not configured. Add SLACK_BOT_TOKEN and SLACK_SIGNING_SECRET to Replit Secrets.");
   }
 
   const client = getClient(params.botToken);
@@ -84,80 +83,75 @@ export async function postApprovalCard(params: ApprovalCardParams): Promise<stri
     ? ` · Confidence: ${Math.round(params.confidenceScore * 100)}%`
     : "";
 
-  try {
-    const result = await client.chat.postMessage({
-      channel: params.channelId,
-      text: `New reply from ${params.leadName} — approval required`,
-      blocks: [
-        {
-          type: "section",
-          text: {
+  const result = await client.chat.postMessage({
+    channel: params.channelId,
+    text: `New reply from ${params.leadName} — approval required`,
+    blocks: [
+      {
+        type: "section",
+        text: {
+          type: "mrkdwn",
+          text: `*New reply from ${params.leadName}* — ${params.leadCompany}`,
+        },
+      },
+      {
+        type: "section",
+        text: {
+          type: "mrkdwn",
+          text: `> _"${params.incomingReply}"_`,
+        },
+      },
+      {
+        type: "section",
+        text: {
+          type: "mrkdwn",
+          text: `*Claude Draft:*\n${params.generatedDraft}`,
+        },
+      },
+      {
+        type: "context",
+        elements: [
+          {
             type: "mrkdwn",
-            text: `*New reply from ${params.leadName}* — ${params.leadCompany}`,
+            text: `#${params.campaignName} · Persona: ${params.personaName} · ${params.region}${confidenceLine}`,
           },
-        },
-        {
-          type: "section",
-          text: {
-            type: "mrkdwn",
-            text: `> _"${params.incomingReply}"_`,
+        ],
+      },
+      { type: "divider" },
+      {
+        type: "actions",
+        block_id: `draft_${params.draftId}`,
+        elements: [
+          {
+            type: "button",
+            text: { type: "plain_text", text: "✅ Send Reply" },
+            style: "primary",
+            action_id: "draft_send",
+            value: String(params.draftId),
           },
-        },
-        {
-          type: "section",
-          text: {
-            type: "mrkdwn",
-            text: `*Claude Draft:*\n${params.generatedDraft}`,
+          {
+            type: "button",
+            text: { type: "plain_text", text: "✏️ Edit Reply" },
+            action_id: "draft_edit",
+            value: String(params.draftId),
           },
-        },
-        {
-          type: "context",
-          elements: [
-            {
-              type: "mrkdwn",
-              text: `#${params.campaignName} · Persona: ${params.personaName} · ${params.region}${confidenceLine}`,
-            },
-          ],
-        },
-        { type: "divider" },
-        {
-          type: "actions",
-          block_id: `draft_${params.draftId}`,
-          elements: [
-            {
-              type: "button",
-              text: { type: "plain_text", text: "✅ Send Reply" },
-              style: "primary",
-              action_id: "draft_send",
-              value: String(params.draftId),
-            },
-            {
-              type: "button",
-              text: { type: "plain_text", text: "✏️ Edit Reply" },
-              action_id: "draft_edit",
-              value: String(params.draftId),
-            },
-            {
-              type: "button",
-              text: { type: "plain_text", text: "🗑️ Discard" },
-              style: "danger",
-              action_id: "draft_discard",
-              value: String(params.draftId),
-            },
-          ],
-        },
-      ],
-    });
-    return result.ts ?? null;
-  } catch (err) {
-    logger.error({ err }, "Failed to post Slack approval card");
-    throw err;
-  }
+          {
+            type: "button",
+            text: { type: "plain_text", text: "🗑️ Discard" },
+            style: "danger",
+            action_id: "draft_discard",
+            value: String(params.draftId),
+          },
+        ],
+      },
+    ],
+  });
+  return result.ts ?? null;
 }
 
-export async function postTestMessage(channelId: string, botToken?: string): Promise<{ ok: boolean; ts?: string; error?: string; mock?: boolean }> {
+export async function postTestMessage(channelId: string, botToken?: string): Promise<{ ok: boolean; ts?: string; error?: string }> {
   if (!isSlackConfigured() && !botToken) {
-    return { ok: true, ts: `mock-ts-${Date.now()}`, mock: true };
+    return { ok: false, error: "SLACK_BOT_TOKEN and SLACK_SIGNING_SECRET are not configured" };
   }
 
   try {

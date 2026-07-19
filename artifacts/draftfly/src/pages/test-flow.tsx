@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -7,6 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   Play,
   CheckCircle2,
@@ -27,26 +28,26 @@ import {
   Loader2,
   XCircle,
   Database,
+  RefreshCw,
 } from "lucide-react";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
-// ─── Mock data (used for client/campaign dropdowns and local flow steps) ────
-
-const MOCK_CLIENTS = [
-  { id: "1", name: "Axiom Sales", channel: "#axiom-replies" },
-  { id: "2", name: "Northbridge Group", channel: "#northbridge-replies" },
-  { id: "3", name: "Venture Scale", channel: "#venturescale-replies" },
-];
-
-const MOCK_CAMPAIGNS = [
-  { id: "1", clientId: "1", name: "SaaS Founders Outreach Q3", lemlistId: "LEM-001" },
-  { id: "2", clientId: "1", name: "VP Sales Sequence — US/UK", lemlistId: "LEM-002" },
-  { id: "3", clientId: "2", name: "DACH Enterprise Expansion", lemlistId: "LEM-003" },
-  { id: "4", clientId: "3", name: "Middle East VC Warm Intro", lemlistId: "LEM-004" },
-];
-
 // ─── Types ────────────────────────────────────────────────────────────────────
+
+interface DbClient {
+  id: number;
+  name: string;
+  slackChannel: string;
+}
+
+interface DbCampaign {
+  id: number;
+  clientId: number;
+  name: string;
+  lemlistCampaignId: string | null;
+  isActive: boolean;
+}
 
 interface FormFields {
   clientId: string;
@@ -66,7 +67,6 @@ interface SimulateResult {
   detectedIntent?: string;
   suggestedNextAction?: string;
   slackTs?: string | null;
-  mock?: boolean;
   error?: string;
 }
 
@@ -94,9 +94,14 @@ const STEPS = [
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export default function TestFlow() {
+  const [clients, setClients] = useState<DbClient[]>([]);
+  const [campaigns, setCampaigns] = useState<DbCampaign[]>([]);
+  const [loadingData, setLoadingData] = useState(true);
+  const [dataError, setDataError] = useState<string | null>(null);
+
   const [fields, setFields] = useState<FormFields>({
-    clientId: "1",
-    campaignId: "1",
+    clientId: "",
+    campaignId: "",
     leadName: "Sarah Mitchell",
     leadCompany: "Momentum Labs",
     leadRole: "VP of Sales",
@@ -114,8 +119,48 @@ export default function TestFlow() {
   const [editing, setEditing] = useState(false);
   const [decidingAction, setDecidingAction] = useState<Decision | null>(null);
 
-  const campaign = MOCK_CAMPAIGNS.find((c) => c.id === fields.campaignId);
-  const availableCampaigns = MOCK_CAMPAIGNS.filter((c) => c.clientId === fields.clientId);
+  // Load clients and campaigns from the real database
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  async function loadData() {
+    setLoadingData(true);
+    setDataError(null);
+    try {
+      const [clientsRes, campaignsRes] = await Promise.all([
+        fetch(`${BASE}/api/clients`),
+        fetch(`${BASE}/api/campaigns`),
+      ]);
+      if (!clientsRes.ok) throw new Error(`Failed to load clients: HTTP ${clientsRes.status}`);
+      if (!campaignsRes.ok) throw new Error(`Failed to load campaigns: HTTP ${campaignsRes.status}`);
+
+      const clientsData = await clientsRes.json() as DbClient[];
+      const campaignsData = await campaignsRes.json() as DbCampaign[];
+
+      setClients(clientsData);
+      setCampaigns(campaignsData);
+
+      // Auto-select first client and its first campaign
+      if (clientsData.length > 0) {
+        const firstClient = clientsData[0];
+        const firstCampaign = campaignsData.find((c) => c.clientId === firstClient.id);
+        setFields((f) => ({
+          ...f,
+          clientId: String(firstClient.id),
+          campaignId: firstCampaign ? String(firstCampaign.id) : "",
+        }));
+      }
+    } catch (err) {
+      setDataError(err instanceof Error ? err.message : "Failed to load data");
+    } finally {
+      setLoadingData(false);
+    }
+  }
+
+  const selectedClient = clients.find((c) => String(c.id) === fields.clientId);
+  const availableCampaigns = campaigns.filter((c) => String(c.clientId) === fields.clientId);
+  const selectedCampaign = campaigns.find((c) => String(c.id) === fields.campaignId);
 
   function now() {
     return new Date().toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
@@ -132,7 +177,6 @@ export default function TestFlow() {
   async function runFlow() {
     if (stage === "running") return;
 
-    // Reset
     setStage("running");
     setCompletedSteps([]);
     setActiveStep(null);
@@ -142,13 +186,12 @@ export default function TestFlow() {
     setEditing(false);
     setEditedDraft("");
 
-    // Animate through steps before/during the real API call
     const stepTimings: [string, number][] = [
       ["webhook", 500],
       ["campaign", 600],
       ["persona", 500],
       ["region", 400],
-      ["draft", 1200], // longest — this is where Claude runs
+      ["draft", 1200],
       ["slack", 500],
     ];
 
@@ -159,17 +202,16 @@ export default function TestFlow() {
         setCompletedSteps((prev) => [...prev, stepId]);
         addLog(
           stepLabels[stepId] ?? stepId,
-          stepMessages(stepId, fields, campaign),
+          stepMessages(stepId, fields, selectedCampaign),
         );
       }
     })();
 
-    // Real API call in parallel with animations
     const apiPromise = fetch(`${BASE}/api/webhooks/lemlist/simulate`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        campaignId: campaign?.lemlistId ?? fields.campaignId,
+        campaignId: selectedCampaign?.lemlistCampaignId ?? fields.campaignId,
         leadName: fields.leadName,
         leadEmail: `${fields.leadName.toLowerCase().replace(/\s+/g, ".")}@${fields.leadCompany.toLowerCase().replace(/\s+/g, "")}.io`,
         leadCompany: fields.leadCompany,
@@ -182,28 +224,26 @@ export default function TestFlow() {
       .catch((err): SimulateResult => ({
         ok: false,
         error: err instanceof Error ? err.message : "Network error",
-        mock: true,
-        generatedDraft: generateLocalDraft(fields),
-        confidenceScore: 0.82,
-        detectedIntent: "interest",
-        suggestedNextAction: "schedule_call",
       }));
 
-    // Wait for both
     const [apiResult] = await Promise.all([apiPromise, stepAnimPromise]);
 
     setResult(apiResult);
     setActiveStep("done");
     setCompletedSteps((prev) => [...prev, "done"]);
     setEditedDraft(apiResult.generatedDraft ?? "");
-    setStage("approval");
+
+    if (apiResult.ok && apiResult.generatedDraft) {
+      setStage("approval");
+    } else {
+      setStage("done");
+    }
   }
 
   async function handleDecision(d: Decision) {
     if (decision || !result) return;
     setDecidingAction(d);
 
-    // If we have a real draftId, call the API to update status
     if (result.draftId) {
       try {
         await fetch(`${BASE}/api/drafts/${result.draftId}/action`, {
@@ -216,7 +256,7 @@ export default function TestFlow() {
         });
         addLog("Draft Action", `PATCH /api/drafts/${result.draftId}/action — status updated to "${d}"`, true);
       } catch {
-        addLog("Draft Action", `API call failed — status recorded locally only`, false);
+        addLog("Draft Action", `API call failed — status not persisted`, false);
       }
     }
 
@@ -225,12 +265,12 @@ export default function TestFlow() {
     setStage("done");
 
     if (d === "send") {
-      addLog("Approval Decision", `✅ SEND — draft approved. ${result.mock ? "Mock delivery (no Lemlist secret)" : "Payload dispatched to Lemlist"}`, true);
+      addLog("Approval Decision", `✅ SEND — draft approved and dispatched`, true);
     } else if (d === "edit") {
       setEditing(true);
-      addLog("Approval Decision", `✏️ EDIT — operator opened revision. Submit to dispatch`, true);
+      addLog("Approval Decision", `✏️ EDIT — revision opened`, true);
     } else {
-      addLog("Approval Decision", `🗑️ DISCARD — draft rejected. No message sent to prospect`, false);
+      addLog("Approval Decision", `🗑️ DISCARD — draft rejected, no reply sent`, false);
     }
   }
 
@@ -242,14 +282,15 @@ export default function TestFlow() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ action: "edit", editedText: editedDraft }),
         });
-      } catch { /* logged locally */ }
+      } catch { /* noop */ }
     }
     setEditing(false);
-    addLog("Edited Draft Sent", `Revised draft dispatched to Lemlist${result?.mock ? " (mock)" : ""}`, true);
+    addLog("Edited Draft Sent", "Revised draft dispatched", true);
   }
 
   const showApproval = stage === "approval" || stage === "done";
   const draft = editedDraft || result?.generatedDraft || "";
+  const hasNoData = !loadingData && clients.length === 0;
 
   return (
     <div className="space-y-8 max-w-6xl">
@@ -258,14 +299,12 @@ export default function TestFlow() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight" data-testid="text-title">Test Flow</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Simulate the full pipeline end-to-end. Calls real backend routes — falls back to mock when secrets are not configured.
+            Simulate the full pipeline end-to-end against real APIs.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Badge className="bg-amber-500/10 text-amber-400 border-amber-500/20 font-mono text-[10px] tracking-wider">MOCK TEST ONLY</Badge>
-          <Badge className="bg-muted text-muted-foreground border-border font-mono text-[10px] tracking-wider">NO REAL MESSAGE SENT</Badge>
-          <Badge className="bg-primary/10 text-primary border-primary/20 font-mono text-[10px] tracking-wider">DRAFT MODE</Badge>
-          <Badge className="bg-emerald-500/10 text-emerald-400 border-emerald-500/20 font-mono text-[10px] tracking-wider">HUMAN APPROVAL FLOW</Badge>
+          <Badge className="bg-emerald-500/10 text-emerald-400 border-emerald-500/20 font-mono text-[10px] tracking-wider">REAL API CALLS</Badge>
+          <Badge className="bg-primary/10 text-primary border-primary/20 font-mono text-[10px] tracking-wider">HUMAN APPROVAL FLOW</Badge>
         </div>
       </div>
 
@@ -274,11 +313,34 @@ export default function TestFlow() {
         <Zap className="h-3.5 w-3.5 shrink-0 mt-0.5 text-primary" />
         <p>
           <span className="font-medium text-foreground">Production flow: </span>
-          Lemlist webhook &rarr; campaign / persona mapping &rarr; Claude draft &rarr; Slack approval card &rarr; operator decision &rarr; Lemlist send.
-          This test calls <span className="font-mono text-foreground">POST /api/webhooks/lemlist/simulate</span> which runs the real server-side pipeline.
-          {result?.mock && <span className="text-amber-400"> Running in mock mode — add secrets in Replit Secrets to activate real APIs.</span>}
+          Lemlist webhook → campaign / persona mapping → Claude draft → Slack approval card → operator decision → Lemlist send.
+          This calls <span className="font-mono text-foreground">POST /api/webhooks/lemlist/simulate</span> which runs the real server-side pipeline using configured API keys.
         </p>
       </div>
+
+      {/* No clients/campaigns warning */}
+      {hasNoData && (
+        <Alert className="border-amber-500/30 bg-amber-500/10">
+          <AlertTriangle className="h-4 w-4 text-amber-400" />
+          <AlertDescription className="text-amber-300">
+            No clients or campaigns found in the database. Go to{" "}
+            <a href="/" className="underline font-medium">Clients</a> and{" "}
+            <a href="/" className="underline font-medium">Campaigns</a> to create them first, then return here to run a test.
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {dataError && (
+        <Alert className="border-red-500/30 bg-red-500/10">
+          <XCircle className="h-4 w-4 text-red-400" />
+          <AlertDescription className="text-red-300 flex items-center gap-2">
+            {dataError}
+            <button onClick={loadData} className="underline font-medium flex items-center gap-1">
+              <RefreshCw className="h-3 w-3" /> Retry
+            </button>
+          </AlertDescription>
+        </Alert>
+      )}
 
       <div className="grid grid-cols-1 xl:grid-cols-[400px_1fr] gap-6 items-start">
         {/* LEFT — Form + Pipeline tracker */}
@@ -294,36 +356,51 @@ export default function TestFlow() {
               {/* Client */}
               <div className="space-y-1.5">
                 <Label className="text-xs text-muted-foreground uppercase tracking-wider">Client</Label>
-                <Select
-                  value={fields.clientId}
-                  onValueChange={(v) => {
-                    const first = MOCK_CAMPAIGNS.find((c) => c.clientId === v);
-                    setFields((f) => ({ ...f, clientId: v, campaignId: first?.id ?? "" }));
-                  }}
-                  disabled={stage === "running"}
-                >
-                  <SelectTrigger data-testid="select-client"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {MOCK_CLIENTS.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
-                  </SelectContent>
-                </Select>
+                {loadingData ? (
+                  <div className="h-9 rounded-md border border-border bg-muted/30 animate-pulse" />
+                ) : (
+                  <Select
+                    value={fields.clientId}
+                    onValueChange={(v) => {
+                      const first = campaigns.find((c) => String(c.clientId) === v);
+                      setFields((f) => ({ ...f, clientId: v, campaignId: first ? String(first.id) : "" }));
+                    }}
+                    disabled={stage === "running"}
+                  >
+                    <SelectTrigger data-testid="select-client">
+                      <SelectValue placeholder={clients.length === 0 ? "No clients — create one first" : "Select client"} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {clients.map((c) => <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                )}
+                {selectedClient && (
+                  <p className="text-[10px] text-muted-foreground font-mono">Slack: {selectedClient.slackChannel}</p>
+                )}
               </div>
 
               {/* Campaign */}
               <div className="space-y-1.5">
                 <Label className="text-xs text-muted-foreground uppercase tracking-wider">Campaign</Label>
-                <Select
-                  value={fields.campaignId}
-                  onValueChange={(v) => setFields((f) => ({ ...f, campaignId: v }))}
-                  disabled={stage === "running"}
-                >
-                  <SelectTrigger data-testid="select-campaign"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {availableCampaigns.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-                {campaign && (
-                  <p className="text-[10px] text-muted-foreground font-mono">Lemlist ID: {campaign.lemlistId}</p>
+                {loadingData ? (
+                  <div className="h-9 rounded-md border border-border bg-muted/30 animate-pulse" />
+                ) : (
+                  <Select
+                    value={fields.campaignId}
+                    onValueChange={(v) => setFields((f) => ({ ...f, campaignId: v }))}
+                    disabled={stage === "running" || availableCampaigns.length === 0}
+                  >
+                    <SelectTrigger data-testid="select-campaign">
+                      <SelectValue placeholder={availableCampaigns.length === 0 ? "No campaigns for this client" : "Select campaign"} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {availableCampaigns.map((c) => <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                )}
+                {selectedCampaign?.lemlistCampaignId && (
+                  <p className="text-[10px] text-muted-foreground font-mono">Lemlist ID: {selectedCampaign.lemlistCampaignId}</p>
                 )}
               </div>
 
@@ -361,7 +438,7 @@ export default function TestFlow() {
 
               <Button
                 onClick={runFlow}
-                disabled={stage === "running" || !fields.campaignId || !fields.leadName || !fields.incomingReply}
+                disabled={stage === "running" || !fields.campaignId || !fields.leadName || !fields.incomingReply || hasNoData}
                 className="w-full gap-2 font-semibold"
                 data-testid="button-run-flow"
               >
@@ -414,7 +491,11 @@ export default function TestFlow() {
             <div className="min-h-64 flex items-center justify-center rounded-lg border border-dashed border-border bg-muted/10">
               <div className="text-center space-y-2 px-6">
                 <Play className="h-8 w-8 text-muted-foreground/40 mx-auto" />
-                <p className="text-sm text-muted-foreground">Configure the test parameters and click <span className="font-medium text-foreground">Run Test Flow</span> to simulate the pipeline.</p>
+                <p className="text-sm text-muted-foreground">
+                  {hasNoData
+                    ? "Create a client and campaign first, then run the test flow."
+                    : "Configure the test parameters and click Run Test Flow to simulate the pipeline."}
+                </p>
               </div>
             </div>
           )}
@@ -450,9 +531,6 @@ export default function TestFlow() {
                       <span className="font-mono text-foreground">{result.suggestedNextAction}</span>
                     </div>
                   )}
-                  {result.mock && (
-                    <Badge className="bg-amber-500/10 text-amber-400 border-amber-500/20 text-[10px]">mock — no secrets configured</Badge>
-                  )}
                 </div>
                 {result.error && (
                   <p className="text-xs text-red-400 mt-2">Error: {result.error}</p>
@@ -470,7 +548,7 @@ export default function TestFlow() {
                     <Bot className="h-4 w-4 text-primary" /> Claude Draft
                   </CardTitle>
                   <Badge className="bg-primary/10 text-primary border-primary/20 font-mono text-[10px]">
-                    {result?.mock ? "mock (no ANTHROPIC_API_KEY)" : "claude-3-5-sonnet"}
+                    claude-3-5-sonnet
                   </Badge>
                 </div>
               </CardHeader>
@@ -498,7 +576,7 @@ export default function TestFlow() {
             </Card>
           )}
 
-          {/* Slack approval card */}
+          {/* Slack approval card preview */}
           {showApproval && draft && !decision && (
             <Card data-testid="result-slack-card">
               <CardHeader className="pb-2">
@@ -508,9 +586,7 @@ export default function TestFlow() {
                 <CardDescription>
                   {result?.slackTs
                     ? `Posted to Slack — ts: ${result.slackTs}`
-                    : result?.mock
-                    ? "Mock card — add SLACK_BOT_TOKEN to post real messages"
-                    : "Posted to client approval channel"}
+                    : "Slack approval card (preview — configure SLACK_BOT_TOKEN to post real messages)"}
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -543,7 +619,7 @@ export default function TestFlow() {
                   </div>
 
                   <div className="flex items-center gap-3 text-[11px] text-[#7E7E7E]">
-                    <span className="flex items-center gap-1"><Hash className="h-3 w-3" /> {campaign?.name}</span>
+                    <span className="flex items-center gap-1"><Hash className="h-3 w-3" /> {selectedCampaign?.name ?? "—"}</span>
                     <span>&middot;</span>
                     <span>{fields.leadCountry}</span>
                     {result?.confidenceScore != null && (
@@ -606,15 +682,10 @@ export default function TestFlow() {
                       {decision === "discard" && "Draft discarded — no reply sent"}
                     </p>
                     <p className="text-xs text-muted-foreground mt-1">
-                      {decision === "send" && `${result?.mock ? "Mock delivery — no Lemlist secret configured" : "Payload dispatched to Lemlist for delivery"}. Draft #${result?.draftId ?? "?"} status updated to "sent" in database.`}
-                      {decision === "edit" && `Revised draft ${result?.mock ? "recorded locally" : "dispatched to Lemlist"}. Draft #${result?.draftId ?? "?"} status updated to "edited".`}
-                      {decision === "discard" && `No reply sent. Draft #${result?.draftId ?? "?"} status updated to "discarded" in database.`}
+                      {decision === "send" && `Draft #${result?.draftId ?? "?"} status updated to "sent".`}
+                      {decision === "edit" && `Draft #${result?.draftId ?? "?"} status updated to "edited".`}
+                      {decision === "discard" && `Draft #${result?.draftId ?? "?"} status updated to "discarded".`}
                     </p>
-                    <div className="flex flex-wrap gap-2 mt-3">
-                      <Badge className="bg-muted text-muted-foreground border-border font-mono text-[10px]">MOCK TEST ONLY</Badge>
-                      <Badge className="bg-muted text-muted-foreground border-border font-mono text-[10px]">NO REAL MESSAGE SENT</Badge>
-                      {decision !== "discard" && <Badge className="bg-emerald-500/10 text-emerald-400 border-emerald-500/20 font-mono text-[10px]">HUMAN APPROVED</Badge>}
-                    </div>
                   </div>
                 </div>
               </CardContent>
@@ -671,25 +742,14 @@ const stepLabels: Record<string, string> = {
   done: "Done",
 };
 
-function stepMessages(stepId: string, fields: FormFields, campaign: { lemlistId: string; name: string } | undefined): string {
+function stepMessages(stepId: string, fields: FormFields, campaign: DbCampaign | undefined): string {
   switch (stepId) {
     case "webhook": return `POST /api/webhooks/lemlist/simulate — reply from ${fields.leadName} at ${fields.leadCompany}`;
-    case "campaign": return `Matched campaign "${campaign?.name ?? "—"}" (${campaign?.lemlistId ?? "?"}) by Lemlist campaign ID`;
+    case "campaign": return `Matched campaign "${campaign?.name ?? "—"}" (${campaign?.lemlistCampaignId ?? "?"}) by Lemlist campaign ID`;
     case "persona": return `Persona lookup — loading tone, CTA, objection handling, region rules`;
     case "region": return `Country "${fields.leadCountry}" → regional tone bucket applied`;
     case "draft": return `claude-3-5-sonnet — generating personalised reply draft`;
     case "slack": return `Approval card posted to client Slack channel`;
     default: return "";
   }
-}
-
-function generateLocalDraft(fields: FormFields): string {
-  const reply = fields.incomingReply.toLowerCase();
-  if (reply.includes("pric") || reply.includes("cost")) {
-    return `Hi ${fields.leadName},\n\nThanks for asking — pricing depends on your team's outreach volume and which channels you're running. I'd rather walk you through it in context than give you a number without understanding your setup. Would 15 minutes this week work?`;
-  }
-  if (reply.includes("detail") || reply.includes("more") || reply.includes("interest") || reply.includes("yes")) {
-    return `Hi ${fields.leadName},\n\nHappy to share more. The core idea: when a prospect replies to your Lemlist campaign, we draft a personalised follow-up using AI and post it to your Slack for a one-click approval — before anything goes out to the lead.\n\nWould a 15-minute call make sense this week to see if this fits ${fields.leadCompany}'s current setup?`;
-  }
-  return `Hi ${fields.leadName},\n\nThanks for getting back to me. Based on what you've shared, I think there's a genuine fit here for ${fields.leadCompany}. Would it make sense to schedule a quick call to explore whether the timing is right?`;
 }

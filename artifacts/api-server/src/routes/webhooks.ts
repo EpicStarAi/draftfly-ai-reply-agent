@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq } from "drizzle-orm";
+import { eq, or } from "drizzle-orm";
 import {
   db,
   draftsTable,
@@ -86,11 +86,13 @@ async function processLemlistReply(payload: LemlistWebhookPayload): Promise<{
   detectedIntent?: string;
   slackTs?: string | null;
 }> {
-  // 1. Find campaign by Lemlist campaign ID
-  const [campaign] = await db
-    .select()
-    .from(campaignsTable)
-    .where(eq(campaignsTable.lemlistCampaignId, String(payload.campaignId)));
+  // 1. Find campaign by Lemlist campaign ID, with fallback to numeric DB ID
+  const campaignIdStr = String(payload.campaignId);
+  const numericId = parseInt(campaignIdStr, 10);
+  const whereClause = !isNaN(numericId)
+    ? or(eq(campaignsTable.lemlistCampaignId, campaignIdStr), eq(campaignsTable.id, numericId))
+    : eq(campaignsTable.lemlistCampaignId, campaignIdStr);
+  const [campaign] = await db.select().from(campaignsTable).where(whereClause);
 
   if (!campaign) {
     logger.warn({ campaignId: payload.campaignId }, "No DraftFly campaign found for Lemlist campaign ID");
@@ -167,7 +169,6 @@ async function processLemlistReply(payload: LemlistWebhookPayload): Promise<{
       detectedIntent: draftResult.detectedIntent,
       suggestedNextAction: draftResult.suggestedNextAction,
       confidenceScore: draftResult.confidenceScore,
-      mock: draftResult.mock ?? false,
     }),
   });
 
@@ -181,7 +182,7 @@ async function processLemlistReply(payload: LemlistWebhookPayload): Promise<{
     message: `Claude draft generated — intent: ${draftResult.detectedIntent}, confidence: ${Math.round(draftResult.confidenceScore * 100)}%, next: ${draftResult.suggestedNextAction}`,
     source: "claude",
     generatedDraft: draftResult.draft,
-    metadata: JSON.stringify({ mock: draftResult.mock ?? false }),
+    metadata: JSON.stringify({}),
   });
 
   // 8. Activity feed
