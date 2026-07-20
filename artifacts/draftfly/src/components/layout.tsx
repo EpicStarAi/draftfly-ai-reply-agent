@@ -1,12 +1,12 @@
-import { SidebarProvider, Sidebar, SidebarHeader, SidebarContent, SidebarGroup, SidebarGroupContent, SidebarMenu, SidebarMenuItem, SidebarMenuButton } from "@/components/ui/sidebar";
+import { SidebarProvider, Sidebar, SidebarHeader, SidebarContent, SidebarGroup, SidebarGroupContent, SidebarGroupLabel, SidebarMenu, SidebarMenuItem, SidebarMenuButton } from "@/components/ui/sidebar";
 import { Link, useLocation } from "wouter";
-import { LayoutDashboard, Users, Megaphone, Inbox, Activity, Settings, UserCircle, MessageSquare, ClipboardCheck, Wrench, Plug, FlaskConical, History } from "lucide-react";
+import { LayoutDashboard, Users, Megaphone, Inbox, UserCircle, MessageSquare, ClipboardCheck, Wrench, FlaskConical, History, Settings } from "lucide-react";
 import React from "react";
 
 export function AppLayout({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
 
-  const navItems = [
+  const mainNav = [
     { name: "Overview", href: "/", icon: LayoutDashboard },
     { name: "Clients", href: "/clients", icon: Users },
     { name: "Personas", href: "/personas", icon: UserCircle },
@@ -14,11 +14,12 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
     { name: "Draft Replies", href: "/drafts", icon: Inbox },
     { name: "Reply History", href: "/reply-history", icon: History },
     { name: "Slack Approval", href: "/slack-approval", icon: MessageSquare },
-    { name: "Slack App Setup", href: "/slack-app-setup", icon: Plug },
+  ];
+
+  const internalNav = [
     { name: "Test Flow", href: "/test-flow", icon: FlaskConical },
     { name: "Client Onboarding", href: "/onboarding", icon: ClipboardCheck },
     { name: "Internal Setup", href: "/internal-setup", icon: Wrench },
-    { name: "Logs", href: "/logs", icon: Activity },
     { name: "Settings", href: "/settings", icon: Settings },
   ];
 
@@ -36,10 +37,31 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
             <SidebarGroup>
               <SidebarGroupContent>
                 <SidebarMenu>
-                  {navItems.map((item) => (
+                  {mainNav.map((item) => (
                     <SidebarMenuItem key={item.href}>
-                      <SidebarMenuButton 
-                        asChild 
+                      <SidebarMenuButton
+                        asChild
+                        isActive={location === item.href || (location.startsWith(item.href) && item.href !== "/")}
+                        className="data-[active=true]:border-t data-[active=true]:border-primary/20 data-[active=true]:bg-accent/50 transition-all"
+                      >
+                        <Link href={item.href} className="flex items-center gap-3" data-testid={`nav-${item.name.toLowerCase().replace(/\s+/g, '-')}`}>
+                          <item.icon className="h-4 w-4" />
+                          <span className="text-sm font-medium">{item.name}</span>
+                        </Link>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  ))}
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </SidebarGroup>
+            <SidebarGroup>
+              <SidebarGroupLabel className="text-xs text-muted-foreground/50 uppercase tracking-widest px-2 pt-2">Internal</SidebarGroupLabel>
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  {internalNav.map((item) => (
+                    <SidebarMenuItem key={item.href}>
+                      <SidebarMenuButton
+                        asChild
                         isActive={location === item.href || (location.startsWith(item.href) && item.href !== "/")}
                         className="data-[active=true]:border-t data-[active=true]:border-primary/20 data-[active=true]:bg-accent/50 transition-all"
                       >
