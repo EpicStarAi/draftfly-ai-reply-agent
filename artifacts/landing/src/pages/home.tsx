@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "@/hooks/use-toast";
 
-const DASHBOARD_URL = "https://sales-reply-ai.replit.app";
+const DASHBOARD_URL = "https://sales-reply-ai.replit.app/app";
 
 const fadeIn = {
   hidden: { opacity: 0, y: 20 },
