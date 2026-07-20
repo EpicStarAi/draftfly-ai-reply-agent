@@ -5,6 +5,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/not-found";
 import { AppLayout } from "@/components/layout";
 import { ThemeProvider } from "@/hooks/use-theme";
+import { LangProvider } from "@/hooks/use-lang";
 import Login from "@/pages/login";
 import { ProtectedRoute } from "@/components/protected-route";
 
@@ -68,6 +69,7 @@ function ProtectedRouter() {
 function App() {
   return (
     <ThemeProvider>
+      <LangProvider>
       <QueryClientProvider client={queryClient}>
         <TooltipProvider>
           <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
@@ -79,6 +81,7 @@ function App() {
           <Toaster />
         </TooltipProvider>
       </QueryClientProvider>
+      </LangProvider>
     </ThemeProvider>
   );
 }

@@ -2,6 +2,8 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { QueryClient, QueryClientProvider, useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { useToast } from "@/hooks/use-toast";
+import { useTheme } from "@/hooks/use-theme";
+import { useLang } from "@/hooks/use-lang";
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1, staleTime: 10_000 } },
@@ -79,27 +81,27 @@ interface DashboardStats {
 
 type Tab = "pending" | "history";
 
-function StatsBar({ stats }: { stats: DashboardStats }) {
+function StatsBar({ stats, tr }: { stats: DashboardStats; tr: ReturnType<typeof useLang>["tr"] }) {
   return (
     <div className="stats-bar">
       <div className="stat-item">
         <span className="stat-value pending">{stats.pendingDrafts}</span>
-        <span className="stat-label">Pending</span>
+        <span className="stat-label">{tr.pending}</span>
       </div>
       <div className="stat-divider" />
       <div className="stat-item">
         <span className="stat-value">{stats.sentToday ?? 0}</span>
-        <span className="stat-label">Sent today</span>
+        <span className="stat-label">{tr.sentToday}</span>
       </div>
       <div className="stat-divider" />
       <div className="stat-item">
         <span className="stat-value">{stats.totalSent}</span>
-        <span className="stat-label">Total sent</span>
+        <span className="stat-label">{tr.totalSent}</span>
       </div>
       <div className="stat-divider" />
       <div className="stat-item">
         <span className="stat-value accent">{stats.successRate}%</span>
-        <span className="stat-label">Success rate</span>
+        <span className="stat-label">{tr.successRate}</span>
       </div>
     </div>
   );
@@ -108,9 +110,11 @@ function StatsBar({ stats }: { stats: DashboardStats }) {
 function DraftCard({
   draft,
   onAction,
+  tr,
 }: {
   draft: Draft;
   onAction: (id: number, action: string, editedText?: string) => void;
+  tr: ReturnType<typeof useLang>["tr"];
 }) {
   const [expanded, setExpanded] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -192,12 +196,12 @@ function DraftCard({
               <button
                 className={`mic-btn${isListening ? " mic-btn--active" : ""}`}
                 onClick={toggleVoice}
-                title={isListening ? "Stop recording" : "Dictate edit"}
+                title={isListening ? tr.stopRecording : tr.dictateEdit}
                 type="button"
               >
                 {isListening ? "⏹" : "🎙"}
               </button>
-              {isListening && <div className="mic-hint">Listening… tap ⏹ to stop</div>}
+              {isListening && <div className="mic-hint">{tr.listening}</div>}
             </div>
           ) : (
             <div className="reply-text">{draft.replyText}</div>
@@ -215,16 +219,16 @@ function DraftCard({
                 setEditing(false);
               }}
             >
-              Send edited
+              {tr.sendEdited}
             </button>
             <button className="btn btn-ghost" onClick={() => setEditing(false)}>
-              Cancel
+              {tr.cancel}
             </button>
           </>
         ) : (
           <>
             <button className="btn btn-send" onClick={() => onAction(draft.id, "send")}>
-              Send
+              {tr.send}
             </button>
             <button
               className="btn btn-edit"
@@ -233,10 +237,10 @@ function DraftCard({
                 setEditing(true);
               }}
             >
-              Edit
+              {tr.edit}
             </button>
             <button className="btn btn-discard" onClick={() => onAction(draft.id, "discard")}>
-              Discard
+              {tr.discard}
             </button>
           </>
         )}
@@ -288,6 +292,8 @@ function HistoryCard({ draft }: { draft: Draft }) {
 function AppInner() {
   const qc = useQueryClient();
   const { toast } = useToast();
+  const { theme, setTheme } = useTheme();
+  const { lang, setLang, tr } = useLang();
   const [tab, setTab] = useState<Tab>("pending");
 
   const { data: stats } = useQuery<DashboardStats>({
@@ -328,7 +334,7 @@ function AppInner() {
       qc.invalidateQueries({ queryKey: ["stats"] });
       window.Telegram?.WebApp.HapticFeedback.notificationOccurred("success");
       toast({
-        title: action === "send" ? "Reply sent" : action === "edit" ? "Edited & sent" : "Discarded",
+        title: action === "send" ? tr.replySent : action === "edit" ? tr.editedSent : tr.discarded,
         duration: 2000,
       });
     },
@@ -353,17 +359,97 @@ function AppInner() {
         <div className="logo">
           <img src="/logo.png" alt="DraftFly" className="logo-img" />
         </div>
-        {userName && <span className="user-name">Hi, {userName}</span>}
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          {userName && <span className="user-name">{tr.hiUser} {userName}</span>}
+          {/* Theme toggle */}
+          <div style={{ display: "flex", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 8, padding: 2, gap: 2 }}>
+            <button
+              onClick={() => setTheme("light")}
+              title="Light"
+              style={{
+                background: theme === "light" ? "var(--accent)" : "transparent",
+                border: "none",
+                borderRadius: 6,
+                color: theme === "light" ? "#fff" : "var(--text-muted)",
+                width: 26,
+                height: 26,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                cursor: "pointer",
+                fontSize: 13,
+                transition: "all 0.15s",
+              }}
+            >
+              ☀
+            </button>
+            <button
+              onClick={() => setTheme("dark")}
+              title="Dark"
+              style={{
+                background: theme === "dark" ? "var(--accent)" : "transparent",
+                border: "none",
+                borderRadius: 6,
+                color: theme === "dark" ? "#fff" : "var(--text-muted)",
+                width: 26,
+                height: 26,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                cursor: "pointer",
+                fontSize: 13,
+                transition: "all 0.15s",
+              }}
+            >
+              ☽
+            </button>
+          </div>
+          {/* Lang toggle */}
+          <div style={{ display: "flex", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 8, padding: 2, gap: 2 }}>
+            <button
+              onClick={() => setLang("en")}
+              style={{
+                background: lang === "en" ? "var(--accent)" : "transparent",
+                border: "none",
+                borderRadius: 6,
+                color: lang === "en" ? "#fff" : "var(--text-muted)",
+                padding: "2px 7px",
+                fontSize: 11,
+                fontWeight: 600,
+                cursor: "pointer",
+                transition: "all 0.15s",
+              }}
+            >
+              EN
+            </button>
+            <button
+              onClick={() => setLang("ru")}
+              style={{
+                background: lang === "ru" ? "var(--accent)" : "transparent",
+                border: "none",
+                borderRadius: 6,
+                color: lang === "ru" ? "#fff" : "var(--text-muted)",
+                padding: "2px 7px",
+                fontSize: 11,
+                fontWeight: 600,
+                cursor: "pointer",
+                transition: "all 0.15s",
+              }}
+            >
+              RU
+            </button>
+          </div>
+        </div>
       </header>
 
-      {stats && <StatsBar stats={stats} />}
+      {stats && <StatsBar stats={stats} tr={tr} />}
 
       <div className="tab-bar">
         <button
           className={`tab ${tab === "pending" ? "active" : ""}`}
           onClick={() => setTab("pending")}
         >
-          Pending
+          {tr.pending}
           {(stats?.pendingDrafts ?? 0) > 0 && (
             <span className="tab-badge">{stats!.pendingDrafts}</span>
           )}
@@ -372,33 +458,33 @@ function AppInner() {
           className={`tab ${tab === "history" ? "active" : ""}`}
           onClick={() => setTab("history")}
         >
-          Sent history
+          {tr.sentHistory}
         </button>
       </div>
 
       <div className="draft-list">
         {tab === "pending" && (
           <>
-            {loadingPending && <div className="loading">Loading drafts…</div>}
+            {loadingPending && <div className="loading">{tr.loadingDrafts}</div>}
             {!loadingPending && pending.length === 0 && (
               <div className="empty">
                 <div className="empty-icon">✓</div>
-                <div className="empty-title">All clear</div>
-                <div className="empty-sub">No pending drafts right now</div>
+                <div className="empty-title">{tr.allClear}</div>
+                <div className="empty-sub">{tr.noPendingDrafts}</div>
               </div>
             )}
             {pending.map((d) => (
-              <DraftCard key={d.id} draft={d} onAction={handleAction} />
+              <DraftCard key={d.id} draft={d} onAction={handleAction} tr={tr} />
             ))}
           </>
         )}
 
         {tab === "history" && (
           <>
-            {loadingHistory && <div className="loading">Loading history…</div>}
+            {loadingHistory && <div className="loading">{tr.loadingDrafts}</div>}
             {!loadingHistory && history.length === 0 && (
               <div className="empty">
-                <div className="empty-sub">No sent replies yet</div>
+                <div className="empty-sub">{tr.noHistory}</div>
               </div>
             )}
             {history.map((d) => (

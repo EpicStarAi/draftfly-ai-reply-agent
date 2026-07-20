@@ -10,6 +10,9 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
+import { Sun, Moon } from "lucide-react";
+import { useTheme } from "@/hooks/use-theme";
+import { useLang } from "@/hooks/use-lang";
 
 const DASHBOARD_URL = "https://sales-reply-ai.replit.app/app";
 
@@ -258,6 +261,8 @@ export default function Home() {
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
   const [submitted, setSubmitted] = useState(false);
+  const { theme, setTheme } = useTheme();
+  const { lang, setLang, tr } = useLang();
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -282,12 +287,44 @@ export default function Home() {
           <div className="flex items-center">
             <img src="/logo.png" alt="DraftFly" className="h-7 w-auto" />
           </div>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3">
+            {/* Theme toggle */}
+            <div className="hidden sm:flex items-center bg-white/5 border border-white/10 rounded-lg p-0.5">
+              <button
+                onClick={() => setTheme("light")}
+                title="Light"
+                className={`p-1.5 rounded transition-all ${theme === "light" ? "bg-white/20 text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+              >
+                <Sun className="h-3.5 w-3.5" />
+              </button>
+              <button
+                onClick={() => setTheme("dark")}
+                title="Dark"
+                className={`p-1.5 rounded transition-all ${theme === "dark" ? "bg-white/20 text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+              >
+                <Moon className="h-3.5 w-3.5" />
+              </button>
+            </div>
+            {/* Language toggle */}
+            <div className="hidden sm:flex items-center bg-white/5 border border-white/10 rounded-lg p-0.5">
+              <button
+                onClick={() => setLang("en")}
+                className={`px-2 py-1 rounded text-xs font-medium transition-all ${lang === "en" ? "bg-white/20 text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+              >
+                EN
+              </button>
+              <button
+                onClick={() => setLang("ru")}
+                className={`px-2 py-1 rounded text-xs font-medium transition-all ${lang === "ru" ? "bg-white/20 text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+              >
+                RU
+              </button>
+            </div>
             <button
               onClick={() => document.getElementById("pricing")?.scrollIntoView({ behavior: "smooth" })}
               className="text-sm text-muted-foreground hover:text-foreground transition-colors hidden sm:block"
             >
-              Pricing
+              {tr.pricing}
             </button>
             <a
               href={DASHBOARD_URL}
@@ -295,13 +332,13 @@ export default function Home() {
               rel="noopener noreferrer"
               className="text-sm text-muted-foreground hover:text-foreground transition-colors hidden sm:block"
             >
-              Sign in
+              {tr.signIn}
             </a>
             <Button
               size="sm"
               onClick={() => document.getElementById("early-access")?.scrollIntoView({ behavior: "smooth" })}
             >
-              Request Access
+              {tr.requestAccess}
             </Button>
           </div>
         </div>
