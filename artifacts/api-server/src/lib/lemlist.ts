@@ -130,20 +130,43 @@ export async function getCampaigns(): Promise<LemlistCampaign[]> {
   return Array.isArray(data) ? data : (data.campaigns ?? []);
 }
 
+export const SEND_REPLY_TIMEOUT_MS = 30_000;
+
 export async function sendReply(params: {
   leadId: string;
   campaignId: string;
   replyText: string;
+  /** Override the default 30 s timeout — useful in tests. */
+  timeoutMs?: number;
 }): Promise<{ ok: boolean; error?: string }> {
   if (!isLemlistConfigured()) {
     throw new Error("LEMLIST_API_KEY is not configured. Add it to Replit Secrets to send replies.");
   }
-  const res = await lemlistFetch(`/campaigns/${params.campaignId}/leads/${params.leadId}/reply`, {
-    method: "POST",
-    body: JSON.stringify({ text: params.replyText }),
-  });
-  if (res.ok) return { ok: true };
-  const body = await res.text();
-  logger.error({ campaignId: params.campaignId, leadId: params.leadId }, `Lemlist sendReply failed: HTTP ${res.status}`);
-  return { ok: false, error: `HTTP ${res.status}: ${body}` };
+
+  const timeoutMs = params.timeoutMs ?? SEND_REPLY_TIMEOUT_MS;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const res = await lemlistFetch(`/campaigns/${params.campaignId}/leads/${params.leadId}/reply`, {
+      method: "POST",
+      body: JSON.stringify({ text: params.replyText }),
+      signal: controller.signal,
+    });
+    if (res.ok) return { ok: true };
+    const body = await res.text();
+    logger.error({ campaignId: params.campaignId, leadId: params.leadId }, `Lemlist sendReply failed: HTTP ${res.status}`);
+    return { ok: false, error: `HTTP ${res.status}: ${body}` };
+  } catch (err) {
+    if (err instanceof Error && (err.name === "AbortError" || err.name === "TimeoutError")) {
+      logger.error(
+        { campaignId: params.campaignId, leadId: params.leadId, timeoutMs },
+        "Lemlist sendReply timed out — no response within the allowed window",
+      );
+      return { ok: false, error: "timeout" };
+    }
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
 }

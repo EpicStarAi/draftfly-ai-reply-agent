@@ -465,6 +465,52 @@ describe("POST /api/slack/actions — send_failed Slack card update", () => {
     expect(sendFailedCall).toBeUndefined();
   });
 
+  it("calls updateMessageAfterAction with 'send_failed' and 'timeout' error when sendReply times out (draft_send)", async () => {
+    mockSendReply.mockResolvedValue({ ok: false, error: "timeout" });
+
+    await request(app)
+      .post("/api/slack/actions")
+      .type("form")
+      .send(blockActionBody("draft_send"));
+
+    await vi.waitFor(
+      () => {
+        expect(mockUpdateMessageAfterAction).toHaveBeenCalledWith(
+          "C_CHANNEL",
+          "1234567890.000100",
+          "send_failed",
+          "U_OPERATOR",
+          undefined,
+          "timeout",
+        );
+      },
+      { timeout: 2_000 },
+    );
+  });
+
+  it("calls updateMessageAfterAction with 'send_failed' and 'timeout' error when sendReply times out (edit modal)", async () => {
+    mockSendReply.mockResolvedValue({ ok: false, error: "timeout" });
+
+    await request(app)
+      .post("/api/slack/actions")
+      .type("form")
+      .send(viewSubmissionBody());
+
+    await vi.waitFor(
+      () => {
+        expect(mockUpdateMessageAfterAction).toHaveBeenCalledWith(
+          "C_CHANNEL",
+          "1234567890.000100",
+          "send_failed",
+          "U_OPERATOR",
+          undefined,
+          "timeout",
+        );
+      },
+      { timeout: 2_000 },
+    );
+  });
+
   it("background process survives when updateMessageAfterAction throws after Lemlist failure", async () => {
     mockSendReply.mockResolvedValue({ ok: false, error: "rate_limited" });
     mockUpdateMessageAfterAction.mockRejectedValue(new Error("Slack token revoked"));
