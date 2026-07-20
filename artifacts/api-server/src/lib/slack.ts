@@ -259,6 +259,28 @@ export async function openEditModal(params: {
   });
 }
 
+export async function postEphemeral(params: {
+  channelId: string;
+  userId: string;
+  text: string;
+  botToken?: string;
+}): Promise<void> {
+  if (!isSlackConfigured() && !params.botToken) {
+    logger.warn("postEphemeral: Slack not configured, cannot post ephemeral message");
+    return;
+  }
+  try {
+    const client = getClient(params.botToken);
+    await client.chat.postEphemeral({
+      channel: params.channelId,
+      user: params.userId,
+      text: params.text,
+    });
+  } catch (err) {
+    logger.warn({ err }, "Failed to post ephemeral Slack message");
+  }
+}
+
 export async function updateMessageAfterAction(
   channelId: string,
   ts: string,

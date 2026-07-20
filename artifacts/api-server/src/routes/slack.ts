@@ -7,6 +7,7 @@ import {
   updateMessageAfterAction,
   postApprovalCard,
   openEditModal,
+  postEphemeral,
   isSlackConfigured,
 } from "../lib/slack";
 import { sendReply } from "../lib/lemlist";
@@ -399,6 +400,32 @@ router.post("/slack/actions", async (req, res): Promise<void> => {
 
     const [client] = await db.select().from(clientsTable).where(eq(clientsTable.id, draft.clientId));
     const botToken = client?.slackBotToken ?? undefined;
+
+    // If the draft was already actioned by someone else, ack and send an
+    // ephemeral message instead of opening the (now-stale) edit modal.
+    if (draft.status === "sent" || draft.status === "edited" || draft.status === "discarded") {
+      req.log.info({ draftId, status: draft.status, userId }, "draft_edit: draft already actioned — sending ephemeral instead of opening modal");
+      res.status(200).json({});
+
+      const statusLabels: Record<string, string> = {
+        sent: "already been sent",
+        edited: "already been edited and sent",
+        discarded: "already been discarded",
+      };
+      const channelId =
+        (payload.channel as { id?: string } | undefined)?.id ??
+        draft.slackMessageTs?.split("|")[0];
+
+      if (channelId) {
+        void postEphemeral({
+          channelId,
+          userId,
+          text: `This draft has ${statusLabels[draft.status] ?? "already been actioned"} — no further action is needed.`,
+          botToken,
+        }).catch((err) => req.log.warn({ err, draftId }, "postEphemeral failed for already-actioned draft"));
+      }
+      return;
+    }
 
     // Ack Slack immediately, then open the modal asynchronously.
     // trigger_id is valid for 3 seconds from when Slack sent the action; the
