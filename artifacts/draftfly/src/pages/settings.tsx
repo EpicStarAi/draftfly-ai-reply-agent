@@ -24,6 +24,9 @@ import {
   Moon,
   Sun,
   Palette,
+  Copy,
+  Check,
+  Webhook,
 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useTheme } from "@/hooks/use-theme";
@@ -208,6 +211,41 @@ function IntegrationCard({
   );
 }
 
+function CopyableUrl({ url, label, step }: { url: string; label: string; step: string }) {
+  const [copied, setCopied] = useState(false);
+
+  function handleCopy() {
+    void navigator.clipboard.writeText(url).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  }
+
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-center justify-between gap-2">
+        <Label className="text-xs text-muted-foreground uppercase tracking-wider">{label}</Label>
+        <span className="text-[10px] text-muted-foreground font-mono bg-muted/40 border border-border rounded px-1.5 py-0.5">{step}</span>
+      </div>
+      <div className="flex gap-2">
+        <Input
+          value={url}
+          readOnly
+          className="font-mono text-xs bg-background/60 border-border flex-1"
+        />
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-9 px-3 shrink-0"
+          onClick={handleCopy}
+        >
+          {copied ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Copy className="h-3.5 w-3.5" />}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 export default function SettingsPage() {
   const { isDark, setTheme } = useTheme();
   const [serverStatus, setServerStatus] = useState<ServerIntegrationStatus | null>(null);
@@ -331,6 +369,76 @@ export default function SettingsPage() {
               />
             </div>
           </div>
+        </CardContent>
+      </Card>
+
+      {/* Webhook Endpoints */}
+      <Card data-testid="card-webhook-endpoints">
+        <CardHeader className="pb-3">
+          <div className="flex items-center gap-2">
+            <Webhook className="h-4 w-4 text-primary" />
+            <div>
+              <CardTitle className="text-base">Webhook Endpoints</CardTitle>
+              <CardDescription className="text-xs mt-0.5">
+                Register these URLs in Slack and Lemlist so they can reach your production server.
+              </CardDescription>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-5">
+          {!serverStatus?.appBaseUrl && !loading && (
+            <div className="flex items-start gap-2 rounded-md bg-amber-500/5 border border-amber-500/20 px-3 py-2 text-xs text-amber-400">
+              <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+              <p>
+                <span className="font-medium">APP_BASE_URL is not set.</span> Add it to Replit environment variables to show the correct production URLs here.
+              </p>
+            </div>
+          )}
+
+          <div className="space-y-4">
+            {/* Slack */}
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <MessageSquare className="h-3.5 w-3.5 text-primary shrink-0" />
+                <p className="text-xs font-medium">Slack — Interactivity &amp; Shortcuts</p>
+              </div>
+              <CopyableUrl
+                label="Request URL"
+                step="api.slack.com/apps → your app → Interactivity & Shortcuts"
+                url={`${serverStatus?.appBaseUrl ?? "https://<your-domain>"}/api/slack/actions`}
+              />
+              <p className="text-[11px] text-muted-foreground pl-0.5">
+                Paste this into <span className="font-mono text-foreground">Interactivity &amp; Shortcuts → Request URL</span>. Slack sends button clicks (Send / Edit / Discard) here.
+              </p>
+            </div>
+
+            <Separator />
+
+            {/* Lemlist */}
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <Link2 className="h-3.5 w-3.5 text-primary shrink-0" />
+                <p className="text-xs font-medium">Lemlist — Campaign Webhook</p>
+              </div>
+              <CopyableUrl
+                label="Webhook URL (emailReplied event)"
+                step="Lemlist → Campaigns → Settings → Webhooks"
+                url={`${serverStatus?.appBaseUrl ?? "https://<your-domain>"}/api/webhooks/lemlist`}
+              />
+              <p className="text-[11px] text-muted-foreground pl-0.5">
+                Add this URL as a webhook for the <span className="font-mono text-foreground">emailReplied</span> event in each campaign. Lemlist will POST reply data here when a lead responds.
+              </p>
+            </div>
+          </div>
+
+          {serverStatus?.appBaseUrl && (
+            <div className="flex items-start gap-2 rounded-md bg-emerald-500/5 border border-emerald-500/20 px-3 py-2 text-xs text-emerald-400">
+              <CheckCircle2 className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+              <p>
+                Production domain is set to <span className="font-mono text-emerald-300">{serverStatus.appBaseUrl}</span>. Register the URLs above in Slack and Lemlist to complete the webhook setup.
+              </p>
+            </div>
+          )}
         </CardContent>
       </Card>
 
