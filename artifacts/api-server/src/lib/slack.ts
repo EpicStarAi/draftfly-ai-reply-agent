@@ -149,6 +149,50 @@ export async function postApprovalCard(params: ApprovalCardParams): Promise<stri
   return result.ts ?? null;
 }
 
+export async function postUnmatchedCampaignAlert(params: {
+  leadEmail: string;
+  campaignId: string;
+}): Promise<void> {
+  const rawChannelEnv = process.env.SLACK_CHANNEL_ID ?? "";
+  const channelIdMatch = rawChannelEnv.match(/\b[CG][A-Z0-9]{9,11}\b/);
+  const channelId = channelIdMatch ? channelIdMatch[0] : null;
+
+  if (!channelId) {
+    logger.warn(
+      { campaignId: params.campaignId },
+      "Unmatched Lemlist campaign — no SLACK_CHANNEL_ID configured, cannot send alert",
+    );
+    return;
+  }
+
+  if (!isSlackConfigured()) {
+    logger.warn(
+      { campaignId: params.campaignId, channelId },
+      "Unmatched Lemlist campaign — Slack not configured, skipping alert",
+    );
+    return;
+  }
+
+  try {
+    const client = getClient();
+    await client.chat.postMessage({
+      channel: channelId,
+      text: `⚠️ Received reply from ${params.leadEmail} for unknown campaign \`${params.campaignId}\` — add it in DraftFly to enable auto-drafting`,
+      blocks: [
+        {
+          type: "section",
+          text: {
+            type: "mrkdwn",
+            text: `⚠️ *Unmatched Lemlist campaign*\n\nReceived a reply from *${params.leadEmail}* for campaign ID \`${params.campaignId}\`, but no matching campaign was found in DraftFly.\n\nAdd the campaign in DraftFly and map it to this Lemlist campaign ID to enable auto-drafting.`,
+          },
+        },
+      ],
+    });
+  } catch (err) {
+    logger.error({ err, campaignId: params.campaignId }, "Failed to post unmatched campaign Slack alert");
+  }
+}
+
 export async function postTestMessage(channelId: string, botToken?: string): Promise<{ ok: boolean; ts?: string; error?: string }> {
   if (!isSlackConfigured() && !botToken) {
     return { ok: false, error: "SLACK_BOT_TOKEN and SLACK_SIGNING_SECRET are not configured" };

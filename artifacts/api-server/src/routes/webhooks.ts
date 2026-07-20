@@ -10,7 +10,7 @@ import {
   activityTable,
 } from "@workspace/db";
 import { generateDraftReply } from "../lib/claude";
-import { postApprovalCard, isSlackConfigured } from "../lib/slack";
+import { postApprovalCard, isSlackConfigured, postUnmatchedCampaignAlert } from "../lib/slack";
 import { isLemlistConfigured } from "../lib/lemlist";
 import type { LemlistWebhookPayload } from "../lib/lemlist";
 import { logger } from "../lib/logger";
@@ -119,6 +119,10 @@ async function processLemlistReply(payload: LemlistWebhookPayload): Promise<{
       source: "lemlist",
       leadId: payload.leadEmail ?? payload.leadId,
       metadata: JSON.stringify(payload),
+    });
+    await postUnmatchedCampaignAlert({
+      leadEmail: payload.leadEmail ?? payload.leadId ?? "unknown",
+      campaignId: campaignIdStr,
     });
     return {};
   }
