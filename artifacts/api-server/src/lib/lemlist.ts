@@ -1,9 +1,56 @@
 import { logger } from "./logger";
+import type {
+  Request as ExpressRequest,
+  Response as ExpressResponse,
+  NextFunction,
+} from "express";
 
 // ─── Configuration ─────────────────────────────────────────────────────────
 
 export function isLemlistConfigured(): boolean {
   return !!process.env.LEMLIST_API_KEY;
+}
+
+export function isWebhookSecretConfigured(): boolean {
+  return !!process.env.LEMLIST_WEBHOOK_SECRET;
+}
+
+/**
+ * Express middleware that verifies incoming Lemlist webhook requests carry the
+ * correct shared secret in the `X-Webhook-Secret` header.
+ *
+ * - If `LEMLIST_WEBHOOK_SECRET` is set: the header must match exactly; mismatches
+ *   return 401 and the request is dropped.
+ * - If `LEMLIST_WEBHOOK_SECRET` is not set: requests are rejected with 503 so the
+ *   endpoint is disabled rather than open to anyone.
+ */
+export function requireWebhookSecret(req: ExpressRequest, res: ExpressResponse, next: NextFunction): void {
+  const secret = process.env.LEMLIST_WEBHOOK_SECRET;
+
+  if (!secret) {
+    logger.error(
+      { path: req.path },
+      "LEMLIST_WEBHOOK_SECRET is not configured — webhook endpoint is disabled. Set this secret in Replit Secrets and add X-Webhook-Secret to your n8n HTTP Request node.",
+    );
+    res.status(503).json({
+      ok: false,
+      error: "Webhook endpoint is not configured. Set LEMLIST_WEBHOOK_SECRET in Replit Secrets.",
+    });
+    return;
+  }
+
+  const provided = req.headers["x-webhook-secret"];
+
+  if (!provided || provided !== secret) {
+    logger.warn(
+      { path: req.path, hasHeader: !!provided },
+      "Lemlist webhook rejected — missing or invalid X-Webhook-Secret",
+    );
+    res.status(401).json({ ok: false, error: "Unauthorized: invalid or missing webhook secret" });
+    return;
+  }
+
+  next();
 }
 
 function getApiKey(): string {

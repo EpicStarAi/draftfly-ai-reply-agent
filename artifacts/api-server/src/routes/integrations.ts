@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { isSlackConfigured, getSlackStatus, postTestMessage } from "../lib/slack";
-import { isLemlistConfigured, testConnection as testLemlist, getCampaigns } from "../lib/lemlist";
+import { isLemlistConfigured, isWebhookSecretConfigured, testConnection as testLemlist, getCampaigns } from "../lib/lemlist";
 import { isClaudeConfigured, testConnection as testClaude } from "../lib/claude";
 
 const router: IRouter = Router();
@@ -55,6 +55,7 @@ router.get("/integrations/status", async (_req, res): Promise<void> => {
     lemlist: {
       configured: isLemlistConfigured(),
       hasApiKey: !!process.env.LEMLIST_API_KEY,
+      hasWebhookSecret: isWebhookSecretConfigured(),
     },
     claude: {
       configured: isClaudeConfigured(),
@@ -152,8 +153,12 @@ router.get("/integrations/n8n/setup", (_req, res): void => {
         url: lemlistWebhookUrl,
         bodyType: "json",
         body: "={{ $json.body }}",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "X-Webhook-Secret": "{{ $env.LEMLIST_WEBHOOK_SECRET }} (set this in n8n credentials or as a fixed value matching your LEMLIST_WEBHOOK_SECRET secret)",
+        },
         note: "Pass the entire Lemlist payload body as-is. DraftFly reads: type, campaignId, leadId, leadEmail, leadFirstName, leadLastName, leadCompanyName, country, jobTitle, replyText",
+        security: "REQUIRED for production: add the X-Webhook-Secret header with the value of LEMLIST_WEBHOOK_SECRET. Requests without a matching secret are rejected with HTTP 401.",
       },
     ],
     lemlistPayloadFields: [

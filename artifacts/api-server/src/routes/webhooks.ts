@@ -11,7 +11,7 @@ import {
 } from "@workspace/db";
 import { generateDraftReply } from "../lib/claude";
 import { postApprovalCard, isSlackConfigured, postUnmatchedCampaignAlert } from "../lib/slack";
-import { isLemlistConfigured } from "../lib/lemlist";
+import { isLemlistConfigured, requireWebhookSecret } from "../lib/lemlist";
 import type { LemlistWebhookPayload } from "../lib/lemlist";
 import { logger } from "../lib/logger";
 
@@ -49,8 +49,8 @@ async function receiveLemlistWebhook(
   });
 }
 
-router.post("/webhooks/lemlist", receiveLemlistWebhook);
-router.post("/webhooks/lemlist/reply", receiveLemlistWebhook);
+router.post("/webhooks/lemlist", requireWebhookSecret, receiveLemlistWebhook);
+router.post("/webhooks/lemlist/reply", requireWebhookSecret, receiveLemlistWebhook);
 
 // POST /webhooks/lemlist/simulate — simulate a Lemlist webhook (for testing)
 router.post("/webhooks/lemlist/simulate", async (req, res): Promise<void> => {
