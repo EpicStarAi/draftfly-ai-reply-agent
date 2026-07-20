@@ -17,6 +17,7 @@ import {
   Loader2,
   TriangleAlert,
   AlertCircle,
+  X,
 } from "lucide-react";
 import {
   BarChart,
@@ -37,6 +38,28 @@ function isPlaceholderChannel(channel: string | null | undefined): boolean {
 }
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
+
+const PLACEHOLDER_ACK_KEY = "draftfly_placeholder_ack";
+
+function getAckedIds(): Set<string> {
+  try {
+    const raw = localStorage.getItem(PLACEHOLDER_ACK_KEY);
+    if (!raw) return new Set();
+    return new Set(JSON.parse(raw) as string[]);
+  } catch {
+    return new Set();
+  }
+}
+
+function ackIds(ids: string[]): void {
+  try {
+    const existing = getAckedIds();
+    for (const id of ids) existing.add(id);
+    localStorage.setItem(PLACEHOLDER_ACK_KEY, JSON.stringify([...existing]));
+  } catch {
+    // ignore storage errors
+  }
+}
 
 interface IntegrationStatus {
   slack: { configured: boolean };
@@ -74,6 +97,19 @@ export default function Dashboard() {
     isPlaceholderChannel(c.slackChannel)
   );
 
+  // Banner is dismissed when every current placeholder ID has been acknowledged.
+  // New placeholder clients (IDs not yet acked) break through the dismissal.
+  const [ackedIds, setAckedIds] = useState<Set<string>>(() => getAckedIds());
+
+  const unackedPlaceholders = placeholderClients.filter((c) => !ackedIds.has(String(c.id)));
+  const showBanner = unackedPlaceholders.length > 0;
+
+  function dismissBanner() {
+    const ids = placeholderClients.map((c) => String(c.id));
+    ackIds(ids);
+    setAckedIds(getAckedIds());
+  }
+
   return (
     <div className="space-y-5">
       <div>
@@ -83,31 +119,40 @@ export default function Dashboard() {
         </p>
       </div>
 
-      {placeholderClients.length > 0 && (
+      {showBanner && (
         <div className="rounded-lg border border-amber-300 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/30 px-4 py-3 flex flex-col sm:flex-row sm:items-center gap-3">
           <div className="flex items-start gap-2.5 flex-1 min-w-0">
             <TriangleAlert className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
             <div className="text-sm text-amber-800 dark:text-amber-200">
               <span className="font-semibold">
-                {placeholderClients.length} {placeholderClients.length === 1 ? "client" : "clients"} still use
+                {unackedPlaceholders.length} {unackedPlaceholders.length === 1 ? "client" : "clients"} still use
                 a placeholder Slack channel
               </span>{" "}
-              — update {placeholderClients.length === 1 ? "it" : "them"} before going live or replies will be mis-routed.
+              — update {unackedPlaceholders.length === 1 ? "it" : "them"} before going live or replies will be mis-routed.
             </div>
           </div>
-          <div className="flex flex-wrap gap-2 shrink-0 pl-6 sm:pl-0">
-            {placeholderClients.slice(0, 3).map((c) => (
+          <div className="flex flex-wrap items-center gap-2 shrink-0 pl-6 sm:pl-0">
+            {unackedPlaceholders.slice(0, 3).map((c) => (
               <Button key={c.id} variant="outline" size="sm" asChild
                 className="border-amber-300 dark:border-amber-700 text-amber-800 dark:text-amber-200 hover:bg-amber-100 dark:hover:bg-amber-900/40 text-xs h-7">
                 <Link href={`/clients/${c.id}`}>{c.name}</Link>
               </Button>
             ))}
-            {placeholderClients.length > 3 && (
+            {unackedPlaceholders.length > 3 && (
               <Button variant="outline" size="sm" asChild
                 className="border-amber-300 dark:border-amber-700 text-amber-800 dark:text-amber-200 hover:bg-amber-100 dark:hover:bg-amber-900/40 text-xs h-7">
-                <Link href="/clients">+{placeholderClients.length - 3} more</Link>
+                <Link href="/clients">+{unackedPlaceholders.length - 3} more</Link>
               </Button>
             )}
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label="Dismiss warning"
+              onClick={dismissBanner}
+              className="h-7 w-7 text-amber-600 dark:text-amber-400 hover:bg-amber-100 dark:hover:bg-amber-900/40 shrink-0 ml-1"
+            >
+              <X className="h-3.5 w-3.5" />
+            </Button>
           </div>
         </div>
       )}
