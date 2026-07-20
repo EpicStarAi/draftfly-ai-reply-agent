@@ -1,7 +1,14 @@
-import { useGetDashboardStats, useListPendingDrafts, useListActivity, useListClients, useGetReplyTrends } from "@workspace/api-client-react";
+import { useGetDashboardStats, useListPendingDrafts, useListActivity, useListClients, useListCampaigns, useGetReplyTrends } from "@workspace/api-client-react";
 import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Link } from "wouter";
 import {
   Users,
@@ -89,7 +96,22 @@ export default function Dashboard() {
   const { data: activity, isLoading: activityLoading } = useListActivity({ limit: 10 });
   const { status: integrations, loading: intLoading } = useIntegrationStatus();
   const { data: clients } = useListClients();
-  const { data: replyTrends, isLoading: trendsLoading } = useGetReplyTrends();
+
+  const [trendClientId, setTrendClientId] = useState<number | undefined>(undefined);
+  const [trendCampaignId, setTrendCampaignId] = useState<number | undefined>(undefined);
+
+  const { data: allCampaigns } = useListCampaigns();
+  const filteredCampaigns = trendClientId !== undefined
+    ? (allCampaigns ?? []).filter((c) => c.clientId === trendClientId)
+    : (allCampaigns ?? []);
+
+  const { data: replyTrends, isLoading: trendsLoading } = useGetReplyTrends(
+    Object.fromEntries(
+      Object.entries({ clientId: trendClientId, campaignId: trendCampaignId }).filter(
+        ([, v]) => v !== undefined
+      )
+    ) as { clientId?: number; campaignId?: number }
+  );
 
   const loading = statsLoading || intLoading;
 
@@ -197,7 +219,49 @@ export default function Dashboard() {
       {/* Reply Trends Chart */}
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-base font-semibold">Reply Volume — Last 30 Days</CardTitle>
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+            <CardTitle className="text-base font-semibold">Reply Volume — Last 30 Days</CardTitle>
+            <div className="flex items-center gap-2 flex-wrap">
+              <Select
+                value={trendClientId !== undefined ? String(trendClientId) : "all"}
+                onValueChange={(v) => {
+                  if (v === "all") {
+                    setTrendClientId(undefined);
+                  } else {
+                    setTrendClientId(Number(v));
+                  }
+                  setTrendCampaignId(undefined);
+                }}
+              >
+                <SelectTrigger className="h-7 text-xs w-36">
+                  <SelectValue placeholder="All clients" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All clients</SelectItem>
+                  {(clients ?? []).map((c) => (
+                    <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select
+                value={trendCampaignId !== undefined ? String(trendCampaignId) : "all"}
+                onValueChange={(v) => {
+                  setTrendCampaignId(v === "all" ? undefined : Number(v));
+                }}
+                disabled={filteredCampaigns.length === 0}
+              >
+                <SelectTrigger className="h-7 text-xs w-40">
+                  <SelectValue placeholder="All campaigns" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All campaigns</SelectItem>
+                  {filteredCampaigns.map((c) => (
+                    <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
         </CardHeader>
         <CardContent>
           {trendsLoading ? (

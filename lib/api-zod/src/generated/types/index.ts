@@ -23,6 +23,7 @@ export * from './draft';
 export * from './draftAction';
 export * from './draftActionAction';
 export * from './draftStatus';
+export * from './getReplyTrendsParams';
 export * from './healthStatus';
 export * from './listActivityParams';
 export * from './listCampaignsParams';

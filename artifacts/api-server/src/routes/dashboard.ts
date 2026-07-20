@@ -1,11 +1,12 @@
 import { Router, type IRouter } from "express";
-import { eq, desc, gte } from "drizzle-orm";
+import { eq, desc, gte, and, type SQL } from "drizzle-orm";
 import { db, clientsTable, campaignsTable, draftsTable, activityTable, personasTable } from "@workspace/db";
 import {
   GetDashboardStatsResponse,
   ListActivityQueryParams,
   ListActivityResponse,
   GetReplyTrendsResponse,
+  GetReplyTrendsQueryParams,
 } from "@workspace/api-zod";
 
 const router: IRouter = Router();
@@ -57,15 +58,29 @@ router.get("/dashboard/activity", async (req, res): Promise<void> => {
   res.json(ListActivityResponse.parse(activity));
 });
 
-router.get("/dashboard/reply-trends", async (_req, res): Promise<void> => {
+router.get("/dashboard/reply-trends", async (req, res): Promise<void> => {
+  const query = GetReplyTrendsQueryParams.safeParse(req.query);
+  if (!query.success) {
+    res.status(400).json({ error: query.error.message });
+    return;
+  }
+
   const since = new Date();
   since.setDate(since.getDate() - 29);
   since.setHours(0, 0, 0, 0);
 
+  const conditions: SQL[] = [gte(draftsTable.createdAt, since)];
+  if (query.data.clientId !== undefined) {
+    conditions.push(eq(draftsTable.clientId, query.data.clientId));
+  }
+  if (query.data.campaignId !== undefined) {
+    conditions.push(eq(draftsTable.campaignId, query.data.campaignId));
+  }
+
   const drafts = await db
     .select({ createdAt: draftsTable.createdAt, status: draftsTable.status })
     .from(draftsTable)
-    .where(gte(draftsTable.createdAt, since));
+    .where(and(...conditions));
 
   const buckets = new Map<string, { pending: number; sent: number; edited: number; discarded: number; send_failed: number }>();
 

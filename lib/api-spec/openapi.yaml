@@ -563,6 +563,15 @@ paths:
       operationId: getReplyTrends
       tags: [dashboard]
       summary: Reply volume per day broken down by status (last 30 days)
+      parameters:
+        - name: clientId
+          in: query
+          schema:
+            type: integer
+        - name: campaignId
+          in: query
+          schema:
+            type: integer
       responses:
         "200":
           description: Reply trends

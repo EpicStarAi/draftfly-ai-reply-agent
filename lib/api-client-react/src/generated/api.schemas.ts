@@ -421,3 +421,8 @@ export type ListActivityParams = {
 limit?: number;
 };
 
+export type GetReplyTrendsParams = {
+clientId?: number;
+campaignId?: number;
+};
+

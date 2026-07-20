@@ -31,6 +31,7 @@ import type {
   DashboardStats,
   Draft,
   DraftAction,
+  GetReplyTrendsParams,
   HealthStatus,
   ListActivityParams,
   ListCampaignsParams,
@@ -2123,20 +2124,27 @@ export function useListActivity<TData = Awaited<ReturnType<typeof listActivity>>
 
 
 
-export const getGetReplyTrendsUrl = () => {
+export const getGetReplyTrendsUrl = (params?: GetReplyTrendsParams,) => {
+  const normalizedParams = new URLSearchParams();
 
+  Object.entries(params || {}).forEach(([key, value]) => {
 
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
 
+  const stringifiedParams = normalizedParams.toString();
 
-  return `/api/dashboard/reply-trends`
+  return stringifiedParams.length > 0 ? `/api/dashboard/reply-trends?${stringifiedParams}` : `/api/dashboard/reply-trends`
 }
 
 /**
  * @summary Reply volume per day broken down by status (last 30 days)
  */
-export const getReplyTrends = async ( options?: RequestInit): Promise<ReplyTrendPoint[]> => {
+export const getReplyTrends = async (params?: GetReplyTrendsParams, options?: RequestInit): Promise<ReplyTrendPoint[]> => {
 
-  return customFetch<ReplyTrendPoint[]>(getGetReplyTrendsUrl(),
+  return customFetch<ReplyTrendPoint[]>(getGetReplyTrendsUrl(params),
   {
     ...options,
     method: 'GET'
@@ -2149,23 +2157,23 @@ export const getReplyTrends = async ( options?: RequestInit): Promise<ReplyTrend
 
 
 
-export const getGetReplyTrendsQueryKey = () => {
+export const getGetReplyTrendsQueryKey = (params?: GetReplyTrendsParams,) => {
     return [
-    `/api/dashboard/reply-trends`
+    `/api/dashboard/reply-trends`, ...(params ? [params] : [])
     ] as const;
     }
 
 
-export const getGetReplyTrendsQueryOptions = <TData = Awaited<ReturnType<typeof getReplyTrends>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getReplyTrends>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+export const getGetReplyTrendsQueryOptions = <TData = Awaited<ReturnType<typeof getReplyTrends>>, TError = ErrorType<unknown>>(params?: GetReplyTrendsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getReplyTrends>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
 
-  const queryKey =  queryOptions?.queryKey ?? getGetReplyTrendsQueryKey();
+  const queryKey =  queryOptions?.queryKey ?? getGetReplyTrendsQueryKey(params);
 
 
 
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof getReplyTrends>>> = ({ signal }) => getReplyTrends({ signal, ...requestOptions });
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getReplyTrends>>> = ({ signal }) => getReplyTrends(params, { signal, ...requestOptions });
 
 
 
@@ -2183,11 +2191,11 @@ export type GetReplyTrendsQueryError = ErrorType<unknown>
  */
 
 export function useGetReplyTrends<TData = Awaited<ReturnType<typeof getReplyTrends>>, TError = ErrorType<unknown>>(
-  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getReplyTrends>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+ params?: GetReplyTrendsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getReplyTrends>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
-  const queryOptions = getGetReplyTrendsQueryOptions(options)
+  const queryOptions = getGetReplyTrendsQueryOptions(params,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 
