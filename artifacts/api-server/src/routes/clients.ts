@@ -23,7 +23,7 @@ router.get("/clients", async (req, res): Promise<void> => {
 router.post("/clients", async (req, res): Promise<void> => {
   const parsed = CreateClientBody.safeParse(req.body);
   if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.message });
+    res.status(422).json({ error: "Validation failed", details: parsed.error.flatten() });
     return;
   }
   const [client] = await db.insert(clientsTable).values(parsed.data).returning();
@@ -52,7 +52,7 @@ router.patch("/clients/:id", async (req, res): Promise<void> => {
   }
   const parsed = UpdateClientBody.safeParse(req.body);
   if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.message });
+    res.status(422).json({ error: "Validation failed", details: parsed.error.flatten() });
     return;
   }
   const [client] = await db

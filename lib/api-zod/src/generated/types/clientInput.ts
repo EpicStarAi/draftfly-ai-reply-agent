@@ -10,6 +10,10 @@ import type { ClientInputMode } from './clientInputMode';
 export interface ClientInput {
   name: string;
   company?: string;
+  /**
+     * Slack channel ID starting with C or G, e.g. C012AB3CD45
+     * @pattern ^[CG][A-Z0-9]{9,}$
+     */
   slackChannel: string;
   slackWorkspaceId?: string;
   slackBotToken?: string;

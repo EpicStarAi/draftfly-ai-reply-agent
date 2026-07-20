@@ -95,6 +95,16 @@ export default function ClientDetail() {
     lemlistApiKey: "",
     n8nWebhookUrl: ""
   });
+  const [channelError, setChannelError] = useState<string | null>(null);
+
+  const SLACK_CHANNEL_ID_RE = /^[CG][A-Z0-9]{9,}$/;
+  const validateChannel = (value: string): string | null => {
+    if (!value) return "Slack Channel ID is required.";
+    if (!SLACK_CHANNEL_ID_RE.test(value)) {
+      return "Must be a Slack channel ID starting with C or G, like C012AB3CD45.";
+    }
+    return null;
+  };
 
   useEffect(() => {
     if (client) {
@@ -112,6 +122,12 @@ export default function ClientDetail() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    const err = validateChannel(formData.slackChannel);
+    if (err) {
+      setChannelError(err);
+      return;
+    }
+    setChannelError(null);
     updateClient.mutate({ id: clientId, data: formData }, {
       onSuccess: (updated) => {
         queryClient.setQueryData(getGetClientQueryKey(clientId), updated);
@@ -205,11 +221,18 @@ export default function ClientDetail() {
                       id="slackChannel"
                       required
                       placeholder="C0BK6NPBHKJ"
-                      className="font-mono text-sm"
+                      className={`font-mono text-sm${channelError ? " border-destructive focus-visible:ring-destructive" : ""}`}
                       value={formData.slackChannel}
-                      onChange={e => setFormData({ ...formData, slackChannel: e.target.value })}
+                      onChange={e => {
+                        setFormData({ ...formData, slackChannel: e.target.value });
+                        if (channelError) setChannelError(validateChannel(e.target.value));
+                      }}
                     />
-                    <SlackChannelStatus value={formData.slackChannel} />
+                    {channelError ? (
+                      <p className="text-[11px] text-destructive">{channelError}</p>
+                    ) : (
+                      <SlackChannelStatus value={formData.slackChannel} />
+                    )}
                   </div>
 
                   <div className="space-y-1.5">

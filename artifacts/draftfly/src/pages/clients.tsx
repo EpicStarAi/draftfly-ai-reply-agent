@@ -33,17 +33,32 @@ export default function ClientsPage() {
     slackChannel: "",
     mode: "draft" as "draft" | "auto"
   });
+  const [channelError, setChannelError] = useState<string | null>(null);
+
+  const validateChannel = (value: string): string | null => {
+    if (!value) return "Slack Channel ID is required.";
+    if (!SLACK_CHANNEL_ID_RE.test(value)) {
+      return "Must be a Slack channel ID starting with C or G, like C012AB3CD45.";
+    }
+    return null;
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    const err = validateChannel(formData.slackChannel);
+    if (err) {
+      setChannelError(err);
+      return;
+    }
     createClient.mutate({ data: formData }, {
       onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: getListClientsQueryKey() });
         setOpen(false);
         setFormData({ name: "", company: "", slackChannel: "", mode: "draft" });
+        setChannelError(null);
         toast({ title: "Client created" });
       },
-      onError: (err) => {
+      onError: () => {
         toast({ title: "Error creating client", variant: "destructive" });
       }
     });
@@ -74,8 +89,23 @@ export default function ClientsPage() {
                 <Input id="company" value={formData.company} onChange={e => setFormData({ ...formData, company: e.target.value })} />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="slackChannel">Slack Channel</Label>
-                <Input id="slackChannel" required placeholder="#client-name" value={formData.slackChannel} onChange={e => setFormData({ ...formData, slackChannel: e.target.value })} />
+                <Label htmlFor="slackChannel">Slack Channel ID</Label>
+                <Input
+                  id="slackChannel"
+                  required
+                  placeholder="C012AB3CD45"
+                  className={channelError ? "border-destructive focus-visible:ring-destructive" : ""}
+                  value={formData.slackChannel}
+                  onChange={e => {
+                    setFormData({ ...formData, slackChannel: e.target.value });
+                    if (channelError) setChannelError(validateChannel(e.target.value));
+                  }}
+                />
+                {channelError ? (
+                  <p className="text-[11px] text-destructive">{channelError}</p>
+                ) : (
+                  <p className="text-[11px] text-muted-foreground">Must be a Slack channel ID starting with C or G, like C012AB3CD45.</p>
+                )}
               </div>
               <div className="space-y-2">
                 <Label htmlFor="mode">Mode</Label>

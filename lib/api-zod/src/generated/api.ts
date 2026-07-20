@@ -38,10 +38,13 @@ export const ListClientsResponse = zod.array(ListClientsResponseItem)
 /**
  * @summary Create a client account
  */
+export const createClientBodySlackChannelRegExp = new RegExp('^[CG][A-Z0-9]{9,}$');
+
+
 export const CreateClientBody = zod.object({
   "name": zod.string(),
   "company": zod.string().optional(),
-  "slackChannel": zod.string(),
+  "slackChannel": zod.string().regex(createClientBodySlackChannelRegExp).describe('Slack channel ID starting with C or G, e.g. C012AB3CD45'),
   "slackWorkspaceId": zod.string().optional(),
   "slackBotToken": zod.string().optional(),
   "mode": zod.enum(['draft', 'auto']),
@@ -93,10 +96,13 @@ export const UpdateClientParams = zod.object({
   "id": zod.coerce.number()
 })
 
+export const updateClientBodySlackChannelRegExp = new RegExp('^[CG][A-Z0-9]{9,}$');
+
+
 export const UpdateClientBody = zod.object({
   "name": zod.string().optional(),
   "company": zod.string().optional(),
-  "slackChannel": zod.string().optional(),
+  "slackChannel": zod.string().regex(updateClientBodySlackChannelRegExp).optional().describe('Slack channel ID starting with C or G, e.g. C012AB3CD45'),
   "slackWorkspaceId": zod.string().optional(),
   "slackBotToken": zod.string().optional(),
   "mode": zod.enum(['draft', 'auto']).optional(),

@@ -47,6 +47,10 @@ export const ClientInputMode = {
 export interface ClientInput {
   name: string;
   company?: string;
+  /**
+     * Slack channel ID starting with C or G, e.g. C012AB3CD45
+     * @pattern ^[CG][A-Z0-9]{9,}$
+     */
   slackChannel: string;
   slackWorkspaceId?: string;
   slackBotToken?: string;
@@ -66,6 +70,10 @@ export const ClientUpdateMode = {
 export interface ClientUpdate {
   name?: string;
   company?: string;
+  /**
+     * Slack channel ID starting with C or G, e.g. C012AB3CD45
+     * @pattern ^[CG][A-Z0-9]{9,}$
+     */
   slackChannel?: string;
   slackWorkspaceId?: string;
   slackBotToken?: string;

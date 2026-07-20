@@ -622,6 +622,8 @@ components:
           type: string
         slackChannel:
           type: string
+          pattern: "^[CG][A-Z0-9]{9,}$"
+          description: "Slack channel ID starting with C or G, e.g. C012AB3CD45"
         slackWorkspaceId:
           type: string
         slackBotToken:
@@ -643,6 +645,8 @@ components:
           type: string
         slackChannel:
           type: string
+          pattern: "^[CG][A-Z0-9]{9,}$"
+          description: "Slack channel ID starting with C or G, e.g. C012AB3CD45"
         slackWorkspaceId:
           type: string
         slackBotToken:
