@@ -11,6 +11,7 @@ import integrationsRouter from "./integrations";
 import slackRouter from "./slack";
 import webhooksRouter from "./webhooks";
 import stripeRouter from "./stripe";
+import authRouter from "./auth";
 
 const router: IRouter = Router();
 
@@ -26,5 +27,6 @@ router.use(integrationsRouter);
 router.use(slackRouter);
 router.use(webhooksRouter);
 router.use(stripeRouter);
+router.use(authRouter);
 
 export default router;

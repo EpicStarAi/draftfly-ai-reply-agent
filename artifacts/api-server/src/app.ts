@@ -1,10 +1,13 @@
 import express, { type Express, type Request, type Response } from "express";
 import cors from "cors";
 import pinoHttp from "pino-http";
+import session from "express-session";
+import connectPgSimple from "connect-pg-simple";
 import router from "./routes";
 import { logger } from "./lib/logger";
 import { WebhookHandlers } from "./webhookHandlers";
 
+const PgStore = connectPgSimple(session);
 const app: Express = express();
 
 app.use(
@@ -27,7 +30,31 @@ app.use(
   }),
 );
 
-app.use(cors());
+app.use(cors({ credentials: true, origin: true }));
+
+const sessionSecret = process.env["SESSION_SECRET"];
+if (!sessionSecret) {
+  throw new Error("SESSION_SECRET environment variable is required");
+}
+
+app.use(
+  session({
+    store: new PgStore({
+      conString: process.env["DATABASE_URL"],
+      createTableIfMissing: true,
+      tableName: "user_sessions",
+    }),
+    secret: sessionSecret,
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+      secure: process.env["NODE_ENV"] === "production",
+      httpOnly: true,
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+      sameSite: "lax",
+    },
+  }),
+);
 
 app.post(
   "/api/stripe/webhook",

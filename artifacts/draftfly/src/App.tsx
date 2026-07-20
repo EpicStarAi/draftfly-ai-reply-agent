@@ -5,6 +5,8 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/not-found";
 import { AppLayout } from "@/components/layout";
 import { ThemeProvider } from "@/hooks/use-theme";
+import Login from "@/pages/login";
+import { ProtectedRoute } from "@/components/protected-route";
 
 // Pages
 import Dashboard from "@/pages/dashboard";
@@ -34,30 +36,32 @@ const queryClient = new QueryClient({
   },
 });
 
-function Router() {
+function ProtectedRouter() {
   return (
-    <AppLayout>
-      <Switch>
-        <Route path="/" component={Dashboard} />
-        <Route path="/clients" component={Clients} />
-        <Route path="/clients/:id" component={ClientDetail} />
-        <Route path="/personas" component={Personas} />
-        <Route path="/personas/:id" component={PersonaDetail} />
-        <Route path="/campaigns" component={Campaigns} />
-        <Route path="/campaigns/:id" component={CampaignDetail} />
-        <Route path="/drafts" component={Drafts} />
-        <Route path="/drafts/:id" component={DraftDetail} />
-        <Route path="/slack-approval" component={SlackApproval} />
-        <Route path="/slack-app-setup" component={SlackAppSetup} />
-        <Route path="/test-flow" component={TestFlow} />
-        <Route path="/onboarding" component={Onboarding} />
-        <Route path="/internal-setup" component={InternalSetup} />
-        <Route path="/logs" component={Logs} />
-        <Route path="/reply-history" component={ReplyHistory} />
-        <Route path="/settings" component={Settings} />
-        <Route component={NotFound} />
-      </Switch>
-    </AppLayout>
+    <ProtectedRoute>
+      <AppLayout>
+        <Switch>
+          <Route path="/" component={Dashboard} />
+          <Route path="/clients" component={Clients} />
+          <Route path="/clients/:id" component={ClientDetail} />
+          <Route path="/personas" component={Personas} />
+          <Route path="/personas/:id" component={PersonaDetail} />
+          <Route path="/campaigns" component={Campaigns} />
+          <Route path="/campaigns/:id" component={CampaignDetail} />
+          <Route path="/drafts" component={Drafts} />
+          <Route path="/drafts/:id" component={DraftDetail} />
+          <Route path="/slack-approval" component={SlackApproval} />
+          <Route path="/slack-app-setup" component={SlackAppSetup} />
+          <Route path="/test-flow" component={TestFlow} />
+          <Route path="/onboarding" component={Onboarding} />
+          <Route path="/internal-setup" component={InternalSetup} />
+          <Route path="/logs" component={Logs} />
+          <Route path="/reply-history" component={ReplyHistory} />
+          <Route path="/settings" component={Settings} />
+          <Route component={NotFound} />
+        </Switch>
+      </AppLayout>
+    </ProtectedRoute>
   );
 }
 
@@ -67,7 +71,10 @@ function App() {
       <QueryClientProvider client={queryClient}>
         <TooltipProvider>
           <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
-            <Router />
+            <Switch>
+              <Route path="/login" component={Login} />
+              <Route component={ProtectedRouter} />
+            </Switch>
           </WouterRouter>
           <Toaster />
         </TooltipProvider>
