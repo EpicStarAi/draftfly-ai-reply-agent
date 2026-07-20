@@ -6,6 +6,7 @@ import {
   postTestMessage,
   updateMessageAfterAction,
   postApprovalCard,
+  openEditModal,
   isSlackConfigured,
 } from "../lib/slack";
 import { sendReply } from "../lib/lemlist";
@@ -154,9 +155,120 @@ async function processSlackAction(params: {
   }
 }
 
+// ─── Edit modal submission processor ────────────────────────────────────────
+// Runs after Slack has been acknowledged. Saves edited text, sends via Lemlist,
+// and updates the Slack message to show the final sent text.
+
+async function processEditSubmission(params: {
+  draftId: number;
+  editedText: string;
+  userId: string;
+  teamId: string;
+}): Promise<void> {
+  const { draftId, editedText, userId, teamId } = params;
+
+  const [draft] = await db.select().from(draftsTable).where(eq(draftsTable.id, draftId));
+  if (!draft) {
+    logger.warn({ draftId }, "processEditSubmission: draft not found");
+    return;
+  }
+
+  // Idempotency guard
+  if (draft.status !== "pending") {
+    logger.info({ draftId, status: draft.status }, "Draft already actioned — ignoring modal submit");
+    return;
+  }
+
+  const [campaign] = await db.select().from(campaignsTable).where(eq(campaignsTable.id, draft.campaignId));
+  const [client] = await db.select().from(clientsTable).where(eq(clientsTable.id, draft.clientId));
+  const botToken = client?.slackBotToken ?? undefined;
+
+  // Save edited text
+  await db.update(draftsTable)
+    .set({ editedReplyText: editedText })
+    .where(eq(draftsTable.id, draftId));
+
+  if (!campaign) {
+    logger.error({ draftId }, "Campaign not found — cannot send edited reply via Lemlist");
+    if (draft.slackMessageTs) {
+      const [channel, ts] = draft.slackMessageTs.split("|");
+      void updateMessageAfterAction(channel, ts ?? channel, "send_failed", userId, botToken, "Campaign not found");
+    }
+    return;
+  }
+
+  let lemlistError: string | undefined;
+  try {
+    const result = await sendReply({
+      leadId: draft.prospectEmail,
+      campaignId: campaign.lemlistCampaignId,
+      replyText: editedText,
+    });
+    if (!result.ok) {
+      lemlistError = result.error;
+      logger.error({ draftId, lemlistError }, "Lemlist sendReply failed after edit — draft left pending");
+    }
+  } catch (err) {
+    lemlistError = err instanceof Error ? err.message : String(err);
+    logger.error({ err, draftId }, "Lemlist sendReply threw after edit — draft left pending");
+  }
+
+  if (lemlistError) {
+    if (draft.slackMessageTs) {
+      const [channel, ts] = draft.slackMessageTs.split("|");
+      void updateMessageAfterAction(channel, ts ?? channel, "send_failed", userId, botToken, lemlistError);
+    }
+    await db.insert(logsTable).values({
+      clientId: draft.clientId,
+      campaignId: draft.campaignId,
+      draftId: draft.id,
+      leadId: draft.prospectEmail,
+      level: "warning",
+      message: `Slack modal edit submit by ${userId}: Lemlist send failed — ${lemlistError}`,
+      source: "slack",
+      metadata: JSON.stringify({ userId, teamId, action: "draft_edit_modal", lemlistError }),
+    });
+    return;
+  }
+
+  // Mark as sent
+  await db.update(draftsTable)
+    .set({ status: "sent", actionedAt: new Date() })
+    .where(eq(draftsTable.id, draftId));
+
+  await db.insert(logsTable).values({
+    clientId: draft.clientId,
+    campaignId: draft.campaignId,
+    draftId: draft.id,
+    leadId: draft.prospectEmail,
+    level: "info",
+    message: `Slack modal edit submitted and sent by ${userId} on draft ${draftId}`,
+    source: "slack",
+    finalStatus: "sent",
+    metadata: JSON.stringify({ userId, teamId, action: "draft_edit_modal" }),
+  });
+
+  await db.insert(activityTable).values({
+    type: "draft_sent",
+    description: `Slack: edited reply to ${draft.prospectName} (${draft.prospectEmail}) sent`,
+    clientId: draft.clientId,
+    campaignId: draft.campaignId,
+    draftId: draft.id,
+    campaignName: campaign.name ?? null,
+  });
+
+  // Update Slack message with "✏️ Reply edited and sent" and the final reply text
+  if (draft.slackMessageTs) {
+    const [channel, ts] = draft.slackMessageTs.split("|");
+    void updateMessageAfterAction(channel, ts ?? channel, "edited", userId, botToken, undefined, editedText)
+      .catch((err) => logger.warn({ err }, "Failed to update Slack message after edit submit"));
+  }
+}
+
 // ─── Routes ─────────────────────────────────────────────────────────────────
 
 // POST /slack/actions — handle Slack block_action payloads (Send / Edit / Discard)
+//                       and view_submission payloads (Edit modal submit)
 router.post("/slack/actions", async (req, res): Promise<void> => {
   const rawBody = (req as unknown as { rawBody?: string }).rawBody ?? JSON.stringify(req.body);
 
@@ -179,6 +291,51 @@ router.post("/slack/actions", async (req, res): Promise<void> => {
     return;
   }
 
+  const payloadType = payload.type as string | undefined;
+  const userId = (payload.user as { id?: string } | undefined)?.id ?? "unknown";
+  const teamId = (payload.team as { id?: string } | undefined)?.id ?? "unknown";
+
+  // ── view_submission: Edit modal submitted ──────────────────────────────────
+  if (payloadType === "view_submission") {
+    const view = payload.view as {
+      callback_id?: string;
+      private_metadata?: string;
+      state?: { values?: Record<string, Record<string, { value?: string }>> };
+    } | undefined;
+
+    if (view?.callback_id !== "draft_edit_modal") {
+      // Unknown modal — ack and ignore
+      res.status(200).json({});
+      return;
+    }
+
+    const draftId = parseInt(view.private_metadata ?? "", 10);
+    if (isNaN(draftId)) {
+      res.status(400).json({ error: "Invalid draft ID in modal metadata" });
+      return;
+    }
+
+    const editedText = view.state?.values?.reply_text_block?.reply_text?.value ?? "";
+    if (!editedText.trim()) {
+      // Return a validation error inside the modal rather than closing it
+      res.status(200).json({
+        response_action: "errors",
+        errors: { reply_text_block: "Reply text cannot be empty." },
+      });
+      return;
+    }
+
+    req.log.info({ draftId, userId, teamId }, "Slack modal edit submitted");
+
+    // Ack to close the modal, then process asynchronously
+    res.status(200).json({});
+
+    void processEditSubmission({ draftId, editedText, userId, teamId })
+      .catch((err) => req.log.error({ err, draftId }, "processEditSubmission failed unexpectedly"));
+    return;
+  }
+
+  // ── block_actions: Send / Edit / Discard buttons ───────────────────────────
   const actions = payload.actions as Array<{ action_id: string; value: string }> | undefined;
   if (!actions || actions.length === 0) {
     res.status(200).json({});
@@ -192,9 +349,42 @@ router.post("/slack/actions", async (req, res): Promise<void> => {
     return;
   }
 
-  const actionMap: Record<string, "sent" | "edited" | "discarded"> = {
+  req.log.info({ action: action.action_id, draftId, userId, teamId }, "Slack block action received");
+
+  // ✏️ Edit Reply — open a Slack modal pre-populated with the AI draft
+  if (action.action_id === "draft_edit") {
+    const triggerId = payload.trigger_id as string | undefined;
+    if (!triggerId) {
+      res.status(400).json({ error: "Missing trigger_id for modal open" });
+      return;
+    }
+
+    // Fetch the draft text to pre-populate the modal
+    const [draft] = await db.select().from(draftsTable).where(eq(draftsTable.id, draftId));
+    if (!draft) {
+      res.status(404).json({ error: "Draft not found" });
+      return;
+    }
+
+    const [client] = await db.select().from(clientsTable).where(eq(clientsTable.id, draft.clientId));
+    const botToken = client?.slackBotToken ?? undefined;
+
+    // Ack Slack immediately, then open the modal asynchronously.
+    // trigger_id is valid for 3 seconds from when Slack sent the action; the
+    // modal open call is fired within milliseconds of the ack, well within limit.
+    res.status(200).json({});
+
+    void openEditModal({
+      triggerId,
+      draftId,
+      currentText: draft.editedReplyText ?? draft.replyText,
+      botToken,
+    }).catch((err) => req.log.error({ err, draftId }, "openEditModal failed"));
+    return;
+  }
+
+  const actionMap: Record<string, "sent" | "discarded"> = {
     draft_send: "sent",
-    draft_edit: "edited",
     draft_discard: "discarded",
   };
   const newStatus = actionMap[action.action_id];
@@ -202,11 +392,6 @@ router.post("/slack/actions", async (req, res): Promise<void> => {
     res.status(400).json({ error: `Unknown action: ${action.action_id}` });
     return;
   }
-
-  const userId = (payload.user as { id?: string } | undefined)?.id ?? "unknown";
-  const teamId = (payload.team as { id?: string } | undefined)?.id ?? "unknown";
-
-  req.log.info({ action: action.action_id, draftId, userId, teamId }, "Slack block action received");
 
   // Acknowledge Slack immediately — must respond within 3 seconds.
   // All processing (DB updates, Lemlist call, Slack message update) runs asynchronously.

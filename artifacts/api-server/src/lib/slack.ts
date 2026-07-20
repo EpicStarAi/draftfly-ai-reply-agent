@@ -1,5 +1,5 @@
 import crypto from "crypto";
-import { WebClient } from "@slack/web-api";
+import { WebClient, type KnownBlock } from "@slack/web-api";
 import { logger } from "./logger";
 
 // ─── Configuration ─────────────────────────────────────────────────────────
@@ -221,6 +221,44 @@ export async function postTestMessage(channelId: string, botToken?: string): Pro
   }
 }
 
+export async function openEditModal(params: {
+  triggerId: string;
+  draftId: number;
+  currentText: string;
+  botToken?: string;
+}): Promise<void> {
+  if (!isSlackConfigured() && !params.botToken) {
+    logger.warn({ draftId: params.draftId }, "openEditModal: Slack not configured, cannot open modal");
+    return;
+  }
+
+  const client = getClient(params.botToken);
+  await client.views.open({
+    trigger_id: params.triggerId,
+    view: {
+      type: "modal",
+      callback_id: "draft_edit_modal",
+      private_metadata: String(params.draftId),
+      title: { type: "plain_text", text: "Edit Reply" },
+      submit: { type: "plain_text", text: "Send" },
+      close: { type: "plain_text", text: "Cancel" },
+      blocks: [
+        {
+          type: "input",
+          block_id: "reply_text_block",
+          label: { type: "plain_text", text: "Reply text" },
+          element: {
+            type: "plain_text_input",
+            action_id: "reply_text",
+            multiline: true,
+            initial_value: params.currentText,
+          },
+        },
+      ],
+    },
+  });
+}
+
 export async function updateMessageAfterAction(
   channelId: string,
   ts: string,
@@ -228,6 +266,7 @@ export async function updateMessageAfterAction(
   operatorName?: string,
   botToken?: string,
   errorDetail?: string,
+  finalReplyText?: string,
 ): Promise<void> {
   if (!isSlackConfigured() && !botToken) return;
 
@@ -240,9 +279,26 @@ export async function updateMessageAfterAction(
 
   const byLine = operatorName ? ` by ${operatorName}` : "";
   const text = `${labels[action]}${byLine}`;
-  const bodyText = action === "send_failed"
+  const statusLine = action === "send_failed"
     ? `${labels[action]}${byLine}. ${errorDetail ? `Error: ${errorDetail}. ` : ""}The draft is still pending — retry from DraftFly.`
     : `${labels[action]}${byLine}. No further action needed.`;
+
+  const blocks: KnownBlock[] = [
+    {
+      type: "section",
+      text: { type: "mrkdwn", text: statusLine },
+    },
+  ];
+
+  // For edited/sent actions, append the final reply text so reviewers can see
+  // exactly what was sent.
+  if (finalReplyText && (action === "edited" || action === "sent")) {
+    blocks.push({ type: "divider" });
+    blocks.push({
+      type: "section",
+      text: { type: "mrkdwn", text: `*Sent reply:*\n${finalReplyText}` },
+    });
+  }
 
   try {
     const client = getClient(botToken);
@@ -250,12 +306,7 @@ export async function updateMessageAfterAction(
       channel: channelId,
       ts,
       text,
-      blocks: [
-        {
-          type: "section",
-          text: { type: "mrkdwn", text: bodyText },
-        },
-      ],
+      blocks,
     });
   } catch (err) {
     logger.warn({ err }, "Failed to update Slack message after action");
