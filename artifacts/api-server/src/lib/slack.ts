@@ -180,9 +180,10 @@ export async function postTestMessage(channelId: string, botToken?: string): Pro
 export async function updateMessageAfterAction(
   channelId: string,
   ts: string,
-  action: "sent" | "edited" | "discarded",
+  action: "sent" | "edited" | "discarded" | "send_failed",
   operatorName?: string,
   botToken?: string,
+  errorDetail?: string,
 ): Promise<void> {
   if (!isSlackConfigured() && !botToken) return;
 
@@ -190,21 +191,25 @@ export async function updateMessageAfterAction(
     sent: "✅ Reply sent",
     edited: "✏️ Reply edited and sent",
     discarded: "🗑️ Draft discarded",
+    send_failed: "❌ Send failed — reply was not delivered",
   };
+
+  const byLine = operatorName ? ` by ${operatorName}` : "";
+  const text = `${labels[action]}${byLine}`;
+  const bodyText = action === "send_failed"
+    ? `${labels[action]}${byLine}. ${errorDetail ? `Error: ${errorDetail}. ` : ""}The draft is still pending — retry from DraftFly.`
+    : `${labels[action]}${byLine}. No further action needed.`;
 
   try {
     const client = getClient(botToken);
     await client.chat.update({
       channel: channelId,
       ts,
-      text: `${labels[action]}${operatorName ? ` by ${operatorName}` : ""}`,
+      text,
       blocks: [
         {
           type: "section",
-          text: {
-            type: "mrkdwn",
-            text: `${labels[action]}${operatorName ? ` by ${operatorName}` : ""}. No further action needed.`,
-          },
+          text: { type: "mrkdwn", text: bodyText },
         },
       ],
     });

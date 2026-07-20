@@ -1,4 +1,4 @@
-import express, { type Express, type Request, type Response, type NextFunction } from "express";
+import express, { type Express, type Request, type Response } from "express";
 import cors from "cors";
 import pinoHttp from "pino-http";
 import router from "./routes";
@@ -35,7 +35,14 @@ app.use(express.json({
     (_req as unknown as { rawBody: string }).rawBody = buf.toString("utf8");
   },
 }));
-app.use(express.urlencoded({ extended: true }));
+// Also capture raw body for URL-encoded requests (Slack sends interactions as
+// application/x-www-form-urlencoded, so we need rawBody here too for signature verification)
+app.use(express.urlencoded({
+  extended: true,
+  verify: (_req: Request, _res: Response, buf: Buffer) => {
+    (_req as unknown as { rawBody: string }).rawBody = buf.toString("utf8");
+  },
+}));
 
 app.use("/api", router);
 

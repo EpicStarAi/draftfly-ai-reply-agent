@@ -8,22 +8,166 @@ import {
   postApprovalCard,
   isSlackConfigured,
 } from "../lib/slack";
+import { sendReply } from "../lib/lemlist";
 import { logger } from "../lib/logger";
 
 const router: IRouter = Router();
+
+// ─── Background action processor ───────────────────────────────────────────
+// Runs after Slack has been acknowledged. Handles DB updates, Lemlist dispatch,
+// and Slack message updates without blocking the 3-second ack window.
+
+async function processSlackAction(params: {
+  draftId: number;
+  newStatus: "sent" | "edited" | "discarded";
+  actionId: string;
+  userId: string;
+  teamId: string;
+}): Promise<void> {
+  const { draftId, newStatus, actionId, userId, teamId } = params;
+
+  // Fetch draft
+  const [draft] = await db.select().from(draftsTable).where(eq(draftsTable.id, draftId));
+  if (!draft) {
+    logger.warn({ draftId }, "processSlackAction: draft not found");
+    return;
+  }
+
+  // Idempotency guard — ignore if already actioned (protects against Slack retries)
+  if (draft.status !== "pending") {
+    logger.info({ draftId, status: draft.status }, "Draft already actioned — ignoring duplicate Slack interaction");
+    return;
+  }
+
+  // Fetch campaign (needed for Lemlist send and activity log)
+  const [campaign] = await db.select().from(campaignsTable).where(eq(campaignsTable.id, draft.campaignId));
+  const [client] = await db.select().from(clientsTable).where(eq(clientsTable.id, draft.clientId));
+  const botToken = client?.slackBotToken ?? undefined;
+
+  let finalStatus = newStatus;
+  let lemlistError: string | undefined;
+
+  // For "send" — call Lemlist first. Only mark sent if it succeeds.
+  if (newStatus === "sent") {
+    if (!campaign) {
+      logger.error({ draftId }, "Campaign not found — cannot send reply via Lemlist");
+      // Notify Slack and bail without changing draft status
+      if (draft.slackMessageTs) {
+        const [channel, ts] = draft.slackMessageTs.split("|");
+        void updateMessageAfterAction(
+          channel,
+          ts ?? channel,
+          "send_failed",
+          userId,
+          botToken,
+          "Campaign not found",
+        );
+      }
+      return;
+    }
+
+    const replyText = draft.editedReplyText ?? draft.replyText;
+    try {
+      const result = await sendReply({
+        leadId: draft.prospectEmail,
+        campaignId: campaign.lemlistCampaignId,
+        replyText,
+      });
+      if (!result.ok) {
+        lemlistError = result.error;
+        logger.error({ draftId, lemlistError }, "Lemlist sendReply failed — draft left pending");
+        finalStatus = "pending" as unknown as "sent"; // keep pending; cast to reuse variable
+      }
+    } catch (err) {
+      lemlistError = err instanceof Error ? err.message : String(err);
+      logger.error({ err, draftId }, "Lemlist sendReply threw — draft left pending");
+      finalStatus = "pending" as unknown as "sent";
+    }
+
+    // If Lemlist failed, update Slack message with error and bail
+    if (lemlistError) {
+      if (draft.slackMessageTs) {
+        const [channel, ts] = draft.slackMessageTs.split("|");
+        void updateMessageAfterAction(
+          channel,
+          ts ?? channel,
+          "send_failed",
+          userId,
+          botToken,
+          lemlistError,
+        );
+      }
+      await db.insert(logsTable).values({
+        clientId: draft.clientId,
+        campaignId: draft.campaignId,
+        draftId: draft.id,
+        leadId: draft.prospectEmail,
+        level: "warning",
+        message: `Slack action ${actionId} by ${userId}: Lemlist send failed — ${lemlistError}`,
+        source: "slack",
+        metadata: JSON.stringify({ userId, teamId, action: actionId, lemlistError }),
+      });
+      return;
+    }
+  }
+
+  // Update draft status
+  await db.update(draftsTable)
+    .set({ status: finalStatus as "sent" | "edited" | "discarded", actionedAt: new Date() })
+    .where(eq(draftsTable.id, draftId));
+
+  // Log the action
+  await db.insert(logsTable).values({
+    clientId: draft.clientId,
+    campaignId: draft.campaignId,
+    draftId: draft.id,
+    leadId: draft.prospectEmail,
+    level: "info",
+    message: `Slack action ${actionId} by ${userId} on draft ${draftId}`,
+    source: "slack",
+    finalStatus: finalStatus as "sent" | "edited" | "discarded",
+    metadata: JSON.stringify({ userId, teamId, action: actionId }),
+  });
+
+  // Write to activity feed
+  const activityTypeMap = { sent: "draft_sent", edited: "draft_edited", discarded: "draft_discarded" } as const;
+  const resolvedStatus = finalStatus as "sent" | "edited" | "discarded";
+  await db.insert(activityTable).values({
+    type: activityTypeMap[resolvedStatus],
+    description: `Slack: reply to ${draft.prospectName} (${draft.prospectEmail}) ${resolvedStatus}`,
+    clientId: draft.clientId,
+    campaignId: draft.campaignId,
+    draftId: draft.id,
+    campaignName: campaign?.name ?? null,
+  });
+
+  // Update Slack message to reflect the decision (non-blocking)
+  if (draft.slackMessageTs) {
+    const [channel, ts] = draft.slackMessageTs.split("|");
+    void updateMessageAfterAction(
+      channel,
+      ts ?? channel,
+      resolvedStatus,
+      userId,
+      botToken,
+    ).catch((err) => logger.warn({ err }, "Failed to update Slack message"));
+  }
+}
+
+// ─── Routes ─────────────────────────────────────────────────────────────────
 
 // POST /slack/actions — handle Slack block_action payloads (Send / Edit / Discard)
 router.post("/slack/actions", async (req, res): Promise<void> => {
   const rawBody = (req as unknown as { rawBody?: string }).rawBody ?? JSON.stringify(req.body);
 
-  // Verify signature
+  // Verify Slack signature before doing anything else
   if (!verifyIncomingRequest(rawBody, req.headers as Record<string, string | undefined>)) {
     req.log.warn("Slack signature verification failed");
     res.status(401).json({ error: "Invalid signature" });
     return;
   }
 
-  // Slack sends actions as URL-encoded payload field
+  // Parse the payload (Slack sends URL-encoded with a nested JSON `payload` field)
   let payload: Record<string, unknown>;
   try {
     const raw = req.body as { payload?: string } | Record<string, unknown>;
@@ -43,23 +187,11 @@ router.post("/slack/actions", async (req, res): Promise<void> => {
 
   const action = actions[0];
   const draftId = parseInt(action.value, 10);
-  const userId = (payload.user as { id?: string } | undefined)?.id ?? "unknown";
-  const teamId = (payload.team as { id?: string } | undefined)?.id ?? "unknown";
-
-  req.log.info({ action: action.action_id, draftId, userId, teamId }, "Slack block action received");
-
   if (isNaN(draftId)) {
     res.status(400).json({ error: "Invalid draft ID in action value" });
     return;
   }
 
-  const [draft] = await db.select().from(draftsTable).where(eq(draftsTable.id, draftId));
-  if (!draft) {
-    res.status(404).json({ error: "Draft not found" });
-    return;
-  }
-
-  // Determine new status
   const actionMap: Record<string, "sent" | "edited" | "discarded"> = {
     draft_send: "sent",
     draft_edit: "edited",
@@ -71,48 +203,17 @@ router.post("/slack/actions", async (req, res): Promise<void> => {
     return;
   }
 
-  // Update draft
-  await db.update(draftsTable).set({ status: newStatus, actionedAt: new Date() }).where(eq(draftsTable.id, draftId));
+  const userId = (payload.user as { id?: string } | undefined)?.id ?? "unknown";
+  const teamId = (payload.team as { id?: string } | undefined)?.id ?? "unknown";
 
-  // Log the action
-  await db.insert(logsTable).values({
-    clientId: draft.clientId,
-    campaignId: draft.campaignId,
-    draftId: draft.id,
-    leadId: draft.prospectEmail,
-    level: "info",
-    message: `Slack action ${action.action_id} by ${userId} on draft ${draftId}`,
-    source: "slack",
-    finalStatus: newStatus,
-    metadata: JSON.stringify({ userId, teamId, action: action.action_id }),
-  });
+  req.log.info({ action: action.action_id, draftId, userId, teamId }, "Slack block action received");
 
-  // Write to activity feed
-  const [campaign] = await db.select().from(campaignsTable).where(eq(campaignsTable.id, draft.campaignId));
-  const activityTypeMap = { sent: "draft_sent", edited: "draft_edited", discarded: "draft_discarded" } as const;
-  await db.insert(activityTable).values({
-    type: activityTypeMap[newStatus],
-    description: `Slack: reply to ${draft.prospectName} (${draft.prospectEmail}) ${newStatus}`,
-    clientId: draft.clientId,
-    campaignId: draft.campaignId,
-    draftId: draft.id,
-    campaignName: campaign?.name ?? null,
-  });
-
-  // Update Slack message to reflect decision
-  if (draft.slackMessageTs) {
-    const [client] = await db.select().from(clientsTable).where(eq(clientsTable.id, draft.clientId));
-    void updateMessageAfterAction(
-      draft.slackMessageTs.split("|")[0], // channel
-      draft.slackMessageTs.split("|")[1] ?? draft.slackMessageTs,
-      newStatus,
-      userId,
-      client?.slackBotToken ?? undefined,
-    ).catch((err) => req.log.warn({ err }, "Failed to update Slack message"));
-  }
-
-  // Acknowledge Slack immediately (must respond within 3s)
+  // Acknowledge Slack immediately — must respond within 3 seconds.
+  // All processing (DB updates, Lemlist call, Slack message update) runs asynchronously.
   res.status(200).json({});
+
+  void processSlackAction({ draftId, newStatus, actionId: action.action_id, userId, teamId })
+    .catch((err) => req.log.error({ err, draftId }, "processSlackAction failed unexpectedly"));
 });
 
 // POST /slack/test-message — send a test approval card to a channel
