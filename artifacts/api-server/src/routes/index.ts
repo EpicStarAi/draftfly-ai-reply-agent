@@ -12,6 +12,7 @@ import slackRouter from "./slack";
 import webhooksRouter from "./webhooks";
 import stripeRouter from "./stripe";
 import authRouter from "./auth";
+import epicgramRouter from "./epicgram";
 
 const router: IRouter = Router();
 
@@ -28,5 +29,6 @@ router.use(slackRouter);
 router.use(webhooksRouter);
 router.use(stripeRouter);
 router.use(authRouter);
+router.use(epicgramRouter);
 
 export default router;
