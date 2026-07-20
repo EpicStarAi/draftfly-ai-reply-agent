@@ -4,12 +4,18 @@ import { ArrowRight, MessageSquare, Slack, CheckCircle, Zap, Shield, GitMerge, B
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "@/hooks/use-toast";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
 
 const DASHBOARD_URL = "https://sales-reply-ai.replit.app/app";
 
 const fadeIn = {
   hidden: { opacity: 0, y: 20 },
-  visible: { opacity: 1, y: 0, transition: { duration: 0.6, ease: "easeOut" } },
+  visible: { opacity: 1, y: 0, transition: { duration: 0.6, ease: "easeOut" as const } },
 };
 
 const stagger = {
@@ -542,6 +548,74 @@ export default function Home() {
                 </motion.div>
               ))}
             </div>
+          </div>
+        </section>
+
+        {/* FAQ */}
+        <section className="py-24 px-6 relative">
+          <div className="container mx-auto max-w-3xl">
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.6 }}
+              className="text-center mb-14"
+            >
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/5 border border-white/10 text-xs font-medium text-muted-foreground mb-6">
+                FAQ
+              </div>
+              <h2 className="text-3xl md:text-4xl font-bold tracking-tight mb-4">Common questions</h2>
+              <p className="text-muted-foreground text-lg max-w-xl mx-auto">Everything you need to know before you request access.</p>
+            </motion.div>
+
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.6, delay: 0.1 }}
+            >
+              <Accordion type="single" collapsible className="space-y-3">
+                {[
+                  {
+                    q: "What does DraftFly actually do?",
+                    a: "DraftFly connects your inbox, AI drafting engine, and Slack approvals into one deterministic workflow. When a reply comes in, our backend detects it, generates a contextual draft using Claude, and routes it to the right Slack channel for human approval — before anything is sent.",
+                  },
+                  {
+                    q: "Does it replace my SDRs?",
+                    a: "No. DraftFly is a precision tool for your reps, not a replacement. Every draft requires human approval before it leaves your domain. We eliminate the time spent writing, not the judgment call on whether to send.",
+                  },
+                  {
+                    q: "What sending tools does it work with?",
+                    a: "DraftFly currently integrates with Lemlist and can route replies from Gmail Workspace and Outlook. Smartlead, Instantly, HubSpot, and Salesforce are on the roadmap. It sits on top of your existing stack — no infrastructure changes required.",
+                  },
+                  {
+                    q: "How does the AI know what to write?",
+                    a: "DraftFly uses Persona profiles — per-campaign instructions that tell Claude the prospect's role, pain points, tone expectations, and deal context. The model also loads the full email thread before drafting, so replies are always contextually grounded.",
+                  },
+                  {
+                    q: "What is DraftFly's API?",
+                    a: "The API is the internal operating layer that connects reply detection, AI drafting, Slack routing, and email sending. Think of it as the nervous system of the product — it's not a public developer API, but the backbone that lets every part of the service talk to each other in real time.",
+                  },
+                  {
+                    q: "Is my email data secure?",
+                    a: "DraftFly only processes reply content in-flight to generate a draft — we do not store email bodies long-term. All data is encrypted in transit and at rest. We're building toward SOC 2 Type II compliance as we scale.",
+                  },
+                ].map((item, i) => (
+                  <AccordionItem
+                    key={i}
+                    value={`item-${i}`}
+                    className="bg-card border border-white/10 rounded-xl px-6 data-[state=open]:border-white/20 transition-colors"
+                  >
+                    <AccordionTrigger className="text-left text-sm font-medium text-white/90 hover:no-underline py-5">
+                      {item.q}
+                    </AccordionTrigger>
+                    <AccordionContent className="text-sm text-muted-foreground leading-relaxed pb-5">
+                      {item.a}
+                    </AccordionContent>
+                  </AccordionItem>
+                ))}
+              </Accordion>
+            </motion.div>
           </div>
         </section>
 
