@@ -9,7 +9,7 @@ push_to_github() {
     else
       git remote add github "$remote"
     fi
-    git push --force-with-lease github HEAD:main \
+    git push --force github HEAD:main \
       || echo "Warning: GitHub mirror push failed (non-fatal)"
   fi
 }
