@@ -5,9 +5,12 @@
   "type": "module",
   "scripts": {
     "hello": "tsx ./src/hello.ts",
+    "fix-raw-json-drafts": "tsx ./src/fix-raw-json-drafts.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@workspace/db": "workspace:*",
+    "drizzle-orm": "catalog:",
     "stripe": "^22.3.2",
     "stripe-replit-sync": "^1.0.0"
   },
