@@ -924,7 +924,7 @@ components:
     # ---- Dashboard ----
     DashboardStats:
       type: object
-      required: [totalClients, activeCampaigns, totalPersonas, pendingDrafts, totalDraftsSent, totalDraftsDiscarded, totalDraftsEdited, webhooksToday, successRate]
+      required: [totalClients, activeCampaigns, totalPersonas, pendingDrafts, sendFailedDrafts, totalDraftsSent, totalDraftsDiscarded, totalDraftsEdited, webhooksToday, successRate]
       properties:
         totalClients:
           type: integer
@@ -933,6 +933,8 @@ components:
         totalPersonas:
           type: integer
         pendingDrafts:
+          type: integer
+        sendFailedDrafts:
           type: integer
         totalDraftsSent:
           type: integer

@@ -19,6 +19,7 @@ router.get("/dashboard/stats", async (_req, res): Promise<void> => {
   ]);
 
   const pendingDrafts = allDrafts.filter((d) => d.status === "pending").length;
+  const sendFailedDrafts = allDrafts.filter((d) => d.status === "send_failed").length;
   const totalDraftsSent = allDrafts.filter((d) => d.status === "sent").length;
   const totalDraftsDiscarded = allDrafts.filter((d) => d.status === "discarded").length;
   const totalDraftsEdited = allDrafts.filter((d) => d.status === "edited").length;
@@ -36,6 +37,7 @@ router.get("/dashboard/stats", async (_req, res): Promise<void> => {
     activeCampaigns: campaigns.length,
     totalPersonas: personas.length,
     pendingDrafts,
+    sendFailedDrafts,
     totalDraftsSent,
     totalDraftsDiscarded,
     totalDraftsEdited,

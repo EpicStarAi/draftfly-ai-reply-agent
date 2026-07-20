@@ -11,6 +11,7 @@ export interface DashboardStats {
   activeCampaigns: number;
   totalPersonas: number;
   pendingDrafts: number;
+  sendFailedDrafts: number;
   totalDraftsSent: number;
   totalDraftsDiscarded: number;
   totalDraftsEdited: number;

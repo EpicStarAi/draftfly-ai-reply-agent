@@ -2,15 +2,24 @@ import { useListDrafts, useListClients, useApplyDraftAction, getListDraftsQueryK
 import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Link } from "wouter";
+import { Link, useSearch } from "wouter";
 import { DraftStatusBadge } from "@/components/status-badges";
 import { useState } from "react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Check, X, Clock, Mail } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
+const VALID_STATUSES = new Set(["pending", "sent", "edited", "discarded", "send_failed"]);
+
+function getInitialStatus(search: string): string {
+  const params = new URLSearchParams(search);
+  const status = params.get("status") ?? "";
+  return VALID_STATUSES.has(status) ? status : "all";
+}
+
 export default function DraftsPage() {
-  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const search = useSearch();
+  const [statusFilter, setStatusFilter] = useState<string>(() => getInitialStatus(search));
   const [clientFilter, setClientFilter] = useState<string>("all");
   
   const queryParams: any = {};

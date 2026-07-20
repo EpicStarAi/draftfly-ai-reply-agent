@@ -16,6 +16,7 @@ import {
   Link2,
   Loader2,
   TriangleAlert,
+  AlertCircle,
 } from "lucide-react";
 import {
   BarChart,
@@ -112,7 +113,7 @@ export default function Dashboard() {
       )}
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
         <KpiCard
           title="Total Clients"
           value={stats?.totalClients}
@@ -131,6 +132,14 @@ export default function Dashboard() {
           icon={Inbox}
           loading={loading}
           alert={!!stats?.pendingDrafts && stats.pendingDrafts > 0}
+        />
+        <KpiCard
+          title="Send Failed"
+          value={stats?.sendFailedDrafts}
+          icon={AlertCircle}
+          loading={loading}
+          variant={!!stats?.sendFailedDrafts && stats.sendFailedDrafts > 0 ? "error" : "default"}
+          href="/drafts?status=send_failed"
         />
         <KpiCard
           title="Total Sent"
@@ -355,22 +364,35 @@ function KpiCard({
   icon: Icon,
   loading,
   alert,
+  variant = "default",
+  href,
 }: {
   title: string;
   value?: number;
   icon: React.ElementType;
   loading: boolean;
   alert?: boolean;
+  variant?: "default" | "error";
+  href?: string;
 }) {
-  return (
-    <Card className={alert ? "border-amber-300 dark:border-amber-900/60" : ""}>
+  const isError = variant === "error";
+  const isAlert = alert || isError;
+
+  const card = (
+    <Card
+      className={[
+        isError ? "border-orange-400 dark:border-orange-700/70" : "",
+        alert && !isError ? "border-amber-300 dark:border-amber-900/60" : "",
+        href ? "cursor-pointer hover:bg-accent/30 transition-colors" : "",
+      ].filter(Boolean).join(" ")}
+    >
       <CardHeader className="flex flex-row items-center justify-between pb-1 pt-4 px-4">
         <CardTitle className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
           {title}
         </CardTitle>
         <Icon
           className={`h-3.5 w-3.5 shrink-0 ${
-            alert ? "text-amber-500" : "text-muted-foreground/60"
+            isError ? "text-orange-500" : isAlert ? "text-amber-500" : "text-muted-foreground/60"
           }`}
         />
       </CardHeader>
@@ -380,7 +402,7 @@ function KpiCard({
         ) : (
           <div
             className={`text-2xl font-bold tabular-nums ${
-              alert ? "text-amber-600 dark:text-amber-500" : ""
+              isError ? "text-orange-600 dark:text-orange-400" : isAlert ? "text-amber-600 dark:text-amber-500" : ""
             }`}
           >
             {value ?? 0}
@@ -389,6 +411,11 @@ function KpiCard({
       </CardContent>
     </Card>
   );
+
+  if (href) {
+    return <Link href={href}>{card}</Link>;
+  }
+  return card;
 }
 
 function WorkflowStep({

@@ -585,6 +585,7 @@ export const GetDashboardStatsResponse = zod.object({
   "activeCampaigns": zod.number(),
   "totalPersonas": zod.number(),
   "pendingDrafts": zod.number(),
+  "sendFailedDrafts": zod.number(),
   "totalDraftsSent": zod.number(),
   "totalDraftsDiscarded": zod.number(),
   "totalDraftsEdited": zod.number(),
