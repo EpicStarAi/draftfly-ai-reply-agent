@@ -9,7 +9,7 @@ import {
   personasTable,
   activityTable,
 } from "@workspace/db";
-import { generateDraftReply } from "../lib/claude";
+import { generateDraftReply, isValidDraftText } from "../lib/claude";
 import { postApprovalCard, isSlackConfigured, postUnmatchedCampaignAlert } from "../lib/slack";
 import { isLemlistConfigured, requireWebhookSecret } from "../lib/lemlist";
 import type { LemlistWebhookPayload } from "../lib/lemlist";
@@ -185,8 +185,39 @@ async function processLemlistReply(payload: LemlistWebhookPayload): Promise<{
     replyRules: campaign.replyRules ?? undefined,
   });
 
-  // 5. Create draft record
+  // 5. Create draft record — validate extracted text first
   const cleanDraft = extractDraftText(draftResult.draft);
+
+  if (!isValidDraftText(cleanDraft)) {
+    logger.error(
+      { rawLength: draftResult.draft.length, cleanLength: cleanDraft.trim().length, leadEmail },
+      "Claude output failed draft validation — raw AI text is empty or too short to be a real reply",
+    );
+    const [failedDraft] = await db.insert(draftsTable).values({
+      clientId: client.id,
+      campaignId: campaign.id,
+      prospectEmail: leadEmail,
+      prospectName: leadName,
+      prospectCompany: payload.leadCompanyName ?? null,
+      prospectCountry: payload.country ?? null,
+      prospectRole: payload.jobTitle ?? null,
+      conversationSnippet: replyText,
+      replyText: "[Draft generation failed — AI output could not be parsed as a valid reply]",
+      status: "send_failed",
+    }).returning();
+    await db.insert(logsTable).values({
+      clientId: client.id,
+      campaignId: campaign.id,
+      draftId: failedDraft.id,
+      leadId: payload.leadId ?? leadEmail,
+      level: "error",
+      message: `Draft validation failed for ${leadName} (${leadEmail}) — AI returned an empty or unparseable reply (${cleanDraft.trim().length} chars after unwrapping)`,
+      source: "claude",
+      metadata: JSON.stringify({ rawDraft: draftResult.draft.slice(0, 500) }),
+    });
+    return { draftId: failedDraft.id };
+  }
+
   const [draft] = await db.insert(draftsTable).values({
     clientId: client.id,
     campaignId: campaign.id,

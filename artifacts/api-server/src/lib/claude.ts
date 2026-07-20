@@ -14,6 +14,20 @@ function getClient(): Anthropic {
   return _client;
 }
 
+// ─── Draft validation ──────────────────────────────────────────────────────
+
+/** Minimum character length for a draft to be considered a real reply. */
+export const MIN_DRAFT_LENGTH = 10;
+
+/**
+ * Returns true when `text` is long enough to be a genuine AI-generated reply.
+ * Rejects empty strings, whitespace-only strings, and very short outputs that
+ * are almost certainly a refusal, parse error, or incomplete generation.
+ */
+export function isValidDraftText(text: string): boolean {
+  return text.trim().length > MIN_DRAFT_LENGTH;
+}
+
 // ─── Types ─────────────────────────────────────────────────────────────────
 
 export interface DraftParams {
