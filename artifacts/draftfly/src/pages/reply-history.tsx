@@ -43,6 +43,7 @@ export default function ReplyHistoryPage() {
 
   function csvCell(value: string | null | undefined): string {
     let str = value ?? "";
+    str = str.replace(/\r\n|\r|\n/g, " ");
     if (/^[=+\-@\t\r]/.test(str)) {
       str = `\t${str}`;
     }
@@ -64,8 +65,9 @@ export default function ReplyHistoryPage() {
         csvCell(draft.actionedAt ? formatTime(draft.actionedAt) : ""),
       ].join(",");
     });
-    const csv = [headers.map(csvCell).join(","), ...rows].join("\n");
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const csv = [headers.map(csvCell).join(","), ...rows].join("\r\n");
+    const BOM = "\uFEFF";
+    const blob = new Blob([BOM + csv], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
