@@ -22,6 +22,7 @@ import TestFlow from "@/pages/test-flow";
 import Onboarding from "@/pages/onboarding";
 import InternalSetup from "@/pages/internal-setup";
 import Logs from "@/pages/logs";
+import ReplyHistory from "@/pages/reply-history";
 import Settings from "@/pages/settings";
 
 const queryClient = new QueryClient({
@@ -52,6 +53,7 @@ function Router() {
         <Route path="/onboarding" component={Onboarding} />
         <Route path="/internal-setup" component={InternalSetup} />
         <Route path="/logs" component={Logs} />
+        <Route path="/reply-history" component={ReplyHistory} />
         <Route path="/settings" component={Settings} />
         <Route component={NotFound} />
       </Switch>

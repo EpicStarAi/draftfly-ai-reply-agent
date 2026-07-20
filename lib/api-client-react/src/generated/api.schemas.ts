@@ -343,6 +343,7 @@ clientId?: number;
 export type ListDraftsParams = {
 status?: ListDraftsStatus;
 clientId?: number;
+campaignId?: number;
 };
 
 export type ListDraftsStatus = typeof ListDraftsStatus[keyof typeof ListDraftsStatus];

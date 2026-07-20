@@ -33,6 +33,7 @@ router.get("/drafts", async (req, res): Promise<void> => {
   const conditions = [];
   if (query.data.status) conditions.push(eq(draftsTable.status, query.data.status as "pending" | "sent" | "edited" | "discarded"));
   if (query.data.clientId != null) conditions.push(eq(draftsTable.clientId, query.data.clientId));
+  if (query.data.campaignId != null) conditions.push(eq(draftsTable.campaignId, query.data.campaignId));
 
   const drafts = conditions.length > 0
     ? await db.select().from(draftsTable).where(and(...conditions)).orderBy(draftsTable.createdAt)

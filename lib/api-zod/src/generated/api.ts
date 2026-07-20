@@ -380,7 +380,8 @@ export const GetCampaignStatsResponse = zod.object({
  */
 export const ListDraftsQueryParams = zod.object({
   "status": zod.enum(['pending', 'sent', 'edited', 'discarded']).optional(),
-  "clientId": zod.coerce.number().optional()
+  "clientId": zod.coerce.number().optional(),
+  "campaignId": zod.coerce.number().optional()
 })
 
 export const ListDraftsResponseItem = zod.object({

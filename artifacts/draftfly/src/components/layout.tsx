@@ -1,6 +1,6 @@
 import { SidebarProvider, Sidebar, SidebarHeader, SidebarContent, SidebarGroup, SidebarGroupContent, SidebarMenu, SidebarMenuItem, SidebarMenuButton } from "@/components/ui/sidebar";
 import { Link, useLocation } from "wouter";
-import { LayoutDashboard, Users, Megaphone, Inbox, Activity, Settings, UserCircle, MessageSquare, ClipboardCheck, Wrench, Plug, FlaskConical } from "lucide-react";
+import { LayoutDashboard, Users, Megaphone, Inbox, Activity, Settings, UserCircle, MessageSquare, ClipboardCheck, Wrench, Plug, FlaskConical, History } from "lucide-react";
 import React from "react";
 
 export function AppLayout({ children }: { children: React.ReactNode }) {
@@ -12,6 +12,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
     { name: "Personas", href: "/personas", icon: UserCircle },
     { name: "Campaigns", href: "/campaigns", icon: Megaphone },
     { name: "Draft Replies", href: "/drafts", icon: Inbox },
+    { name: "Reply History", href: "/reply-history", icon: History },
     { name: "Slack Approval", href: "/slack-approval", icon: MessageSquare },
     { name: "Slack App Setup", href: "/slack-app-setup", icon: Plug },
     { name: "Test Flow", href: "/test-flow", icon: FlaskConical },

@@ -10,4 +10,5 @@ import type { ListDraftsStatus } from './listDraftsStatus';
 export type ListDraftsParams = {
 status?: ListDraftsStatus;
 clientId?: number;
+campaignId?: number;
 };
