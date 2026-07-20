@@ -1,5 +1,17 @@
 #!/bin/bash
-set -e
+
+FAILED_STEPS=()
+
+pnpm install --frozen-lockfile \
+  || FAILED_STEPS+=("pnpm install")
+
+pnpm --filter db push \
+  || FAILED_STEPS+=("db push")
+
+if [ ${#FAILED_STEPS[@]} -gt 0 ]; then
+  echo "Warning: the following setup steps failed: ${FAILED_STEPS[*]}"
+  echo "GitHub mirror will still be updated."
+fi
 
 push_to_github() {
   if [ -n "$GITHUB_TOKEN" ]; then
@@ -13,7 +25,4 @@ push_to_github() {
       || echo "Warning: GitHub mirror push failed (non-fatal)"
   fi
 }
-trap push_to_github EXIT
-
-pnpm install --frozen-lockfile
-pnpm --filter db push
+push_to_github
