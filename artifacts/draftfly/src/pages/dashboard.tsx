@@ -1,4 +1,4 @@
-import { useGetDashboardStats, useListPendingDrafts, useListActivity } from "@workspace/api-client-react";
+import { useGetDashboardStats, useListPendingDrafts, useListActivity, useListClients } from "@workspace/api-client-react";
 import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -15,7 +15,15 @@ import {
   MessageSquare,
   Link2,
   Loader2,
+  TriangleAlert,
 } from "lucide-react";
+
+const SLACK_CHANNEL_ID_RE = /^[CG][A-Z0-9]{9,}$/;
+
+function isPlaceholderChannel(channel: string | null | undefined): boolean {
+  if (!channel) return true;
+  return !SLACK_CHANNEL_ID_RE.test(channel);
+}
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -46,8 +54,13 @@ export default function Dashboard() {
   const { data: pendingDrafts, isLoading: draftsLoading } = useListPendingDrafts();
   const { data: activity, isLoading: activityLoading } = useListActivity({ limit: 10 });
   const { status: integrations, loading: intLoading } = useIntegrationStatus();
+  const { data: clients } = useListClients();
 
   const loading = statsLoading || intLoading;
+
+  const placeholderClients = (clients ?? []).filter((c) =>
+    isPlaceholderChannel(c.slackChannel)
+  );
 
   return (
     <div className="space-y-5">
@@ -57,6 +70,35 @@ export default function Dashboard() {
           Live overview of your automated reply operations.
         </p>
       </div>
+
+      {placeholderClients.length > 0 && (
+        <div className="rounded-lg border border-amber-300 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/30 px-4 py-3 flex flex-col sm:flex-row sm:items-center gap-3">
+          <div className="flex items-start gap-2.5 flex-1 min-w-0">
+            <TriangleAlert className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+            <div className="text-sm text-amber-800 dark:text-amber-200">
+              <span className="font-semibold">
+                {placeholderClients.length} {placeholderClients.length === 1 ? "client" : "clients"} still use
+                a placeholder Slack channel
+              </span>{" "}
+              — update {placeholderClients.length === 1 ? "it" : "them"} before going live or replies will be mis-routed.
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-2 shrink-0 pl-6 sm:pl-0">
+            {placeholderClients.slice(0, 3).map((c) => (
+              <Button key={c.id} variant="outline" size="sm" asChild
+                className="border-amber-300 dark:border-amber-700 text-amber-800 dark:text-amber-200 hover:bg-amber-100 dark:hover:bg-amber-900/40 text-xs h-7">
+                <Link href={`/clients/${c.id}`}>{c.name}</Link>
+              </Button>
+            ))}
+            {placeholderClients.length > 3 && (
+              <Button variant="outline" size="sm" asChild
+                className="border-amber-300 dark:border-amber-700 text-amber-800 dark:text-amber-200 hover:bg-amber-100 dark:hover:bg-amber-900/40 text-xs h-7">
+                <Link href="/clients">+{placeholderClients.length - 3} more</Link>
+              </Button>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* KPI Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">

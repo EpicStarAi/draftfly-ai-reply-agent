@@ -5,12 +5,20 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Link } from "wouter";
-import { Users, Plus } from "lucide-react";
+import { Users, Plus, TriangleAlert } from "lucide-react";
 import { ClientModeBadge } from "@/components/status-badges";
+
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { useState } from "react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
+
+const SLACK_CHANNEL_ID_RE = /^[CG][A-Z0-9]{9,}$/;
+
+function isPlaceholderChannel(channel: string | null | undefined): boolean {
+  if (!channel) return true;
+  return !SLACK_CHANNEL_ID_RE.test(channel);
+}
 
 export default function ClientsPage() {
   const { data: clients, isLoading } = useListClients();
@@ -103,11 +111,20 @@ export default function ClientsPage() {
             </CardHeader>
             <CardContent>
               <div className="flex items-center justify-between text-sm mt-4">
-                <div className="flex items-center text-muted-foreground">
-                  <Users className="h-4 w-4 mr-1.5" />
-                  {client.slackChannel}
+                <div className="flex items-center gap-1.5 text-muted-foreground min-w-0">
+                  <Users className="h-4 w-4 shrink-0" />
+                  <span className="truncate">{client.slackChannel || "No channel"}</span>
+                  {isPlaceholderChannel(client.slackChannel) && (
+                    <span
+                      title="Placeholder Slack channel — update before going live"
+                      className="inline-flex items-center gap-0.5 shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400 border border-amber-300 dark:border-amber-700"
+                    >
+                      <TriangleAlert className="h-2.5 w-2.5" />
+                      Placeholder
+                    </span>
+                  )}
                 </div>
-                <Button variant="outline" size="sm" asChild>
+                <Button variant="outline" size="sm" asChild className="shrink-0 ml-2">
                   <Link href={`/clients/${client.id}`}>Manage</Link>
                 </Button>
               </div>
