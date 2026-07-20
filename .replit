@@ -27,5 +27,3 @@ channel = "stable-25_05"
 
 [userenv.shared]
 APP_BASE_URL = "https://sales-reply-ai.replit.app"
-ALLOWED_TELEGRAM_USER_IDS = "798537475,7369372055"
-EPICGRAM_API_KEY = "0511f8f802708a741afd8dd8e281fb1ab25f5665b900e54077693672349785d9"
