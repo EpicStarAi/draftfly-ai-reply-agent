@@ -1,16 +1,52 @@
 import { useListDrafts, useListCampaigns, useListClients } from "@workspace/api-client-react";
-import { useState } from "react";
-import { Link } from "wouter";
+import { useState, useEffect, useCallback } from "react";
+import { Link, useSearch, useLocation } from "wouter";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { DraftStatusBadge } from "@/components/status-badges";
-import { Download } from "lucide-react";
+import { Download, Link2, Check } from "lucide-react";
+
+function getInitialFilters(search: string) {
+  const params = new URLSearchParams(search);
+  return {
+    status: params.get("status") ?? "all",
+    client: params.get("clientId") ?? "all",
+    campaign: params.get("campaignId") ?? "all",
+  };
+}
 
 export default function ReplyHistoryPage() {
-  const [statusFilter, setStatusFilter] = useState<string>("all");
-  const [campaignFilter, setCampaignFilter] = useState<string>("all");
-  const [clientFilter, setClientFilter] = useState<string>("all");
+  const search = useSearch();
+  const [, navigate] = useLocation();
+
+  const initial = getInitialFilters(search);
+  const [statusFilter, setStatusFilter] = useState<string>(initial.status);
+  const [campaignFilter, setCampaignFilter] = useState<string>(initial.campaign);
+  const [clientFilter, setClientFilter] = useState<string>(initial.client);
+  const [copied, setCopied] = useState(false);
+
+  const syncToUrl = useCallback(
+    (status: string, client: string, campaign: string) => {
+      const params = new URLSearchParams();
+      if (status !== "all") params.set("status", status);
+      if (client !== "all") params.set("clientId", client);
+      if (campaign !== "all") params.set("campaignId", campaign);
+      const qs = params.toString();
+      const newPath = `/reply-history${qs ? `?${qs}` : ""}`;
+      navigate(newPath, { replace: true });
+    },
+    [navigate],
+  );
+
+  useEffect(() => {
+    syncToUrl(statusFilter, clientFilter, campaignFilter);
+  }, [statusFilter, clientFilter, campaignFilter, syncToUrl]);
+
+  function handleClientChange(v: string) {
+    setClientFilter(v);
+    setCampaignFilter("all");
+  }
 
   const queryParams: Record<string, unknown> = {};
   if (statusFilter !== "all") queryParams.status = statusFilter;
@@ -76,6 +112,13 @@ export default function ReplyHistoryPage() {
     URL.revokeObjectURL(url);
   }
 
+  function copyShareLink() {
+    navigator.clipboard.writeText(window.location.href).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -97,7 +140,26 @@ export default function ReplyHistoryPage() {
             Export CSV
           </Button>
 
-          <Select value={clientFilter} onValueChange={(v) => { setClientFilter(v); setCampaignFilter("all"); }}>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={copyShareLink}
+            className="gap-1.5"
+          >
+            {copied ? (
+              <>
+                <Check className="h-3.5 w-3.5 text-green-600" />
+                <span className="text-green-600">Copied!</span>
+              </>
+            ) : (
+              <>
+                <Link2 className="h-3.5 w-3.5" />
+                Copy link
+              </>
+            )}
+          </Button>
+
+          <Select value={clientFilter} onValueChange={handleClientChange}>
             <SelectTrigger className="w-[160px]">
               <SelectValue placeholder="All Clients" />
             </SelectTrigger>
