@@ -17,8 +17,22 @@ import { logger } from "../lib/logger";
 
 const router: IRouter = Router();
 
-// POST /webhooks/lemlist/reply — main Lemlist webhook receiver
-router.post("/webhooks/lemlist/reply", async (req, res): Promise<void> => {
+// POST /webhooks/lemlist          ← canonical path — use this URL in Lemlist and n8n
+// POST /webhooks/lemlist/reply    ← kept for backward compatibility; same handler
+//
+// Expected n8n workflow shape:
+//   1. Webhook Trigger node  — receives Lemlist "emailReplied" event at N8N_WEBHOOK_URL
+//   2. HTTP Request node     — POST to <APP_BASE_URL>/api/webhooks/lemlist
+//                              Body: pass the Lemlist payload as-is (JSON)
+//                              No extra headers required for unauthenticated dev; add
+//                              an X-Webhook-Secret header for production hardening.
+//
+// Lemlist payload fields used: type, campaignId, leadId, leadEmail, leadFirstName,
+//   leadLastName, leadCompanyName, country, jobTitle, replyText
+async function receiveLemlistWebhook(
+  req: import("express").Request,
+  res: import("express").Response,
+): Promise<void> {
   const payload = req.body as LemlistWebhookPayload;
 
   req.log.info(
@@ -26,14 +40,17 @@ router.post("/webhooks/lemlist/reply", async (req, res): Promise<void> => {
     "Lemlist webhook received",
   );
 
-  // Respond to Lemlist immediately
+  // Respond immediately so Lemlist / n8n don't time out
   res.status(200).json({ ok: true });
 
-  // Process asynchronously to stay within Lemlist's response timeout
+  // Process asynchronously
   void processLemlistReply(payload).catch((err) => {
     logger.error({ err }, "Error processing Lemlist webhook");
   });
-});
+}
+
+router.post("/webhooks/lemlist", receiveLemlistWebhook);
+router.post("/webhooks/lemlist/reply", receiveLemlistWebhook);
 
 // POST /webhooks/lemlist/simulate — simulate a Lemlist webhook (for testing)
 router.post("/webhooks/lemlist/simulate", async (req, res): Promise<void> => {
@@ -196,13 +213,29 @@ async function processLemlistReply(payload: LemlistWebhookPayload): Promise<{
   });
 
   // 9. Post Slack approval card
-  const approvalChannel = client.slackChannel;
+  // Fall back to global SLACK_CHANNEL_ID env var if client channel looks like a placeholder
+  // Extract a valid Slack channel ID (C/G + 9-11 alphanumeric) from env var, in case it contains surrounding text
+  const rawChannelEnv = process.env.SLACK_CHANNEL_ID ?? "";
+  const channelIdMatch = rawChannelEnv.match(/\b[CG][A-Z0-9]{9,11}\b/);
+  const globalChannelId = channelIdMatch ? channelIdMatch[0] : null;
+  // Prefer client channel only if it's a real Slack ID (starts with C/G), not a #name or placeholder
+  const isSlackId = (c: string | null | undefined) => !!c && /^[CG][A-Z0-9]{9,}/.test(c);
+  const approvalChannel = isSlackId(client.slackChannel)
+    ? client.slackChannel
+    : (globalChannelId ?? client.slackChannel);
   let slackTs: string | null = null;
+
+  // Use per-client token only if it looks like a real Slack token; fall back to global env var
+  const isRealToken = (t: string | null | undefined) =>
+    !!t && t.startsWith("xoxb-") && !t.includes("placeholder");
+  const effectiveBotToken = isRealToken(client.slackBotToken)
+    ? (client.slackBotToken ?? undefined)
+    : undefined;
 
   try {
     slackTs = await postApprovalCard({
       channelId: approvalChannel,
-      botToken: client.slackBotToken ?? undefined,
+      botToken: effectiveBotToken,
       draftId: draft.id,
       leadName,
       leadCompany: payload.leadCompanyName ?? "",

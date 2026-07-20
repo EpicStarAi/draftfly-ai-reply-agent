@@ -5,10 +5,44 @@ import { isClaudeConfigured, testConnection as testClaude } from "../lib/claude"
 
 const router: IRouter = Router();
 
-// GET /integrations/status — check all integrations
+// ─── n8n helpers ───────────────────────────────────────────────────────────
+
+function getN8nWebhookUrl(): string | null {
+  return process.env.N8N_WEBHOOK_URL?.trim() || null;
+}
+
+function isN8nConfigured(): boolean {
+  return !!getN8nWebhookUrl();
+}
+
+async function pingN8n(): Promise<{ reachable: boolean; status?: number; error?: string }> {
+  const url = getN8nWebhookUrl();
+  if (!url) return { reachable: false, error: "N8N_WEBHOOK_URL not set" };
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
+    const res = await fetch(url, {
+      method: "HEAD",
+      signal: controller.signal,
+    }).catch(() =>
+      // HEAD not always supported — fall back to GET with empty body
+      fetch(url, { method: "GET", signal: controller.signal }),
+    );
+    clearTimeout(timeout);
+    // n8n returns 2xx or 4xx depending on workflow state; any HTTP response means reachable
+    return { reachable: true, status: res.status };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return { reachable: false, error: msg };
+  }
+}
+
+// ─── GET /integrations/status ──────────────────────────────────────────────
+
 router.get("/integrations/status", async (_req, res): Promise<void> => {
   const slackStatus = getSlackStatus();
   const dbOk = !!process.env.DATABASE_URL;
+  const n8nUrl = getN8nWebhookUrl();
 
   res.json({
     slack: {
@@ -27,8 +61,10 @@ router.get("/integrations/status", async (_req, res): Promise<void> => {
       hasApiKey: !!process.env.ANTHROPIC_API_KEY,
     },
     n8n: {
-      configured: !!process.env.N8N_WEBHOOK_URL,
-      webhookUrl: process.env.N8N_WEBHOOK_URL ?? null,
+      configured: isN8nConfigured(),
+      webhookUrl: n8nUrl,
+      // The canonical endpoint n8n should POST to:
+      lemlistWebhookPath: "/api/webhooks/lemlist",
     },
     database: {
       configured: dbOk,
@@ -37,7 +73,8 @@ router.get("/integrations/status", async (_req, res): Promise<void> => {
   });
 });
 
-// POST /integrations/test/slack — test Slack connection
+// ─── POST /integrations/test/slack ────────────────────────────────────────
+
 router.post("/integrations/test/slack", async (req, res): Promise<void> => {
   const channelId = (req.body as { channelId?: string }).channelId;
   if (!channelId) {
@@ -48,19 +85,22 @@ router.post("/integrations/test/slack", async (req, res): Promise<void> => {
   res.json(result);
 });
 
-// POST /integrations/test/lemlist — test Lemlist connection
+// ─── POST /integrations/test/lemlist ──────────────────────────────────────
+
 router.post("/integrations/test/lemlist", async (_req, res): Promise<void> => {
   const result = await testLemlist();
   res.json(result);
 });
 
-// POST /integrations/test/claude — test Claude connection
+// ─── POST /integrations/test/claude ───────────────────────────────────────
+
 router.post("/integrations/test/claude", async (_req, res): Promise<void> => {
   const result = await testClaude();
   res.json(result);
 });
 
-// POST /integrations/test/database — test DB connection
+// ─── POST /integrations/test/database ─────────────────────────────────────
+
 router.post("/integrations/test/database", async (_req, res): Promise<void> => {
   try {
     const { db } = await import("@workspace/db");
@@ -72,7 +112,68 @@ router.post("/integrations/test/database", async (_req, res): Promise<void> => {
   }
 });
 
-// GET /integrations/lemlist/campaigns — list real Lemlist campaigns
+// ─── POST /integrations/test/n8n ──────────────────────────────────────────
+// Pings the configured N8N_WEBHOOK_URL to confirm the n8n instance is reachable.
+// Returns { ok, reachable, status?, error? }
+
+router.post("/integrations/test/n8n", async (_req, res): Promise<void> => {
+  if (!isN8nConfigured()) {
+    res.status(503).json({ ok: false, error: "N8N_WEBHOOK_URL is not configured" });
+    return;
+  }
+  const result = await pingN8n();
+  res.json({ ok: result.reachable, ...result });
+});
+
+// ─── GET /integrations/n8n/setup ──────────────────────────────────────────
+// Returns the expected n8n workflow shape so the user can configure their workflow.
+
+router.get("/integrations/n8n/setup", (_req, res): void => {
+  const appBaseUrl = process.env.APP_BASE_URL ?? "https://<your-deployed-domain>";
+  const lemlistWebhookUrl = `${appBaseUrl}/api/webhooks/lemlist`;
+
+  res.json({
+    overview: "Lemlist → n8n → DraftFly → Claude → Slack",
+    steps: [
+      {
+        step: 1,
+        node: "Webhook Trigger",
+        description: "Add a Webhook node in n8n. Set it to receive POST requests. Copy the generated webhook URL and paste it into Lemlist → Settings → Webhooks as the 'emailReplied' event URL.",
+        n8nNodeType: "n8n-nodes-base.webhook",
+        method: "POST",
+        yourWebhookUrl: process.env.N8N_WEBHOOK_URL ?? "Set N8N_WEBHOOK_URL in Replit Secrets",
+      },
+      {
+        step: 2,
+        node: "HTTP Request",
+        description: "Add an HTTP Request node after the Webhook Trigger. Configure it to forward the Lemlist payload to DraftFly's API endpoint.",
+        n8nNodeType: "n8n-nodes-base.httpRequest",
+        method: "POST",
+        url: lemlistWebhookUrl,
+        bodyType: "json",
+        body: "={{ $json.body }}",
+        headers: { "Content-Type": "application/json" },
+        note: "Pass the entire Lemlist payload body as-is. DraftFly reads: type, campaignId, leadId, leadEmail, leadFirstName, leadLastName, leadCompanyName, country, jobTitle, replyText",
+      },
+    ],
+    lemlistPayloadFields: [
+      "type (should be 'emailReplied')",
+      "campaignId",
+      "leadId",
+      "leadEmail",
+      "leadFirstName",
+      "leadLastName",
+      "leadCompanyName",
+      "country",
+      "jobTitle",
+      "replyText",
+    ],
+    afterProcessing: "DraftFly generates a Claude draft and posts a Slack approval card with Send / Edit / Discard buttons to the configured Slack channel.",
+  });
+});
+
+// ─── GET /integrations/lemlist/campaigns ──────────────────────────────────
+
 router.get("/integrations/lemlist/campaigns", async (_req, res): Promise<void> => {
   if (!isLemlistConfigured()) {
     res.status(503).json({ error: "LEMLIST_API_KEY is not configured" });
