@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { QueryClient, QueryClientProvider, useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { useToast } from "@/hooks/use-toast";
@@ -7,8 +7,21 @@ const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1, staleTime: 10_000 } },
 });
 
+interface ISpeechRecognition extends EventTarget {
+  lang: string;
+  interimResults: boolean;
+  continuous: boolean;
+  start(): void;
+  stop(): void;
+  onresult: ((e: { results: { [i: number]: { [j: number]: { transcript: string } } } }) => void) | null;
+  onend: (() => void) | null;
+  onerror: (() => void) | null;
+}
+
 declare global {
   interface Window {
+    SpeechRecognition: new () => ISpeechRecognition;
+    webkitSpeechRecognition: new () => ISpeechRecognition;
     Telegram?: {
       WebApp: {
         ready(): void;
@@ -101,6 +114,34 @@ function DraftCard({
   const [expanded, setExpanded] = useState(false);
   const [editing, setEditing] = useState(false);
   const [editText, setEditText] = useState(draft.replyText);
+  const [isListening, setIsListening] = useState(false);
+  const recognitionRef = useRef<ISpeechRecognition | null>(null);
+
+  const toggleVoice = useCallback(() => {
+    const SR = window.SpeechRecognition ?? window.webkitSpeechRecognition;
+    if (!SR) return;
+
+    if (isListening && recognitionRef.current) {
+      recognitionRef.current.stop();
+      return;
+    }
+
+    const rec = new SR();
+    rec.lang = "ru-RU";
+    rec.interimResults = false;
+    rec.continuous = false;
+
+    rec.onresult = (e) => {
+      const transcript = e.results[0]?.[0]?.transcript ?? "";
+      if (transcript) setEditText((prev) => prev + (prev.endsWith(" ") ? "" : " ") + transcript);
+    };
+    rec.onend = () => setIsListening(false);
+    rec.onerror = () => setIsListening(false);
+
+    recognitionRef.current = rec;
+    rec.start();
+    setIsListening(true);
+  }, [isListening]);
 
   const initials = draft.prospectName
     .split(" ")
@@ -140,12 +181,23 @@ function DraftCard({
           )}
           <div className="reply-label">AI DRAFT</div>
           {editing ? (
-            <textarea
-              className="reply-edit"
-              value={editText}
-              onChange={(e) => setEditText(e.target.value)}
-              rows={8}
-            />
+            <div className="edit-wrapper">
+              <textarea
+                className="reply-edit"
+                value={editText}
+                onChange={(e) => setEditText(e.target.value)}
+                rows={8}
+              />
+              <button
+                className={`mic-btn${isListening ? " mic-btn--active" : ""}`}
+                onClick={toggleVoice}
+                title={isListening ? "Stop recording" : "Dictate edit"}
+                type="button"
+              >
+                {isListening ? "⏹" : "🎙"}
+              </button>
+              {isListening && <div className="mic-hint">Listening… tap ⏹ to stop</div>}
+            </div>
           ) : (
             <div className="reply-text">{draft.replyText}</div>
           )}
