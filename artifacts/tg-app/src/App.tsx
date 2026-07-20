@@ -28,7 +28,8 @@ declare global {
         expand(): void;
         colorScheme: "light" | "dark";
         themeParams: Record<string, string>;
-        initDataUnsafe: { user?: { first_name?: string } };
+        initData: string;
+        initDataUnsafe: { user?: { id?: number; first_name?: string } };
         HapticFeedback: {
           impactOccurred(style: "light" | "medium" | "heavy"): void;
           notificationOccurred(type: "error" | "success" | "warning"): void;
@@ -410,6 +411,56 @@ function AppInner() {
   );
 }
 
+type AuthState = "loading" | "ok" | "denied" | "no-tg";
+
+function TelegramAuthGate({ children }: { children: React.ReactNode }) {
+  const [auth, setAuth] = useState<AuthState>(() =>
+    window.Telegram?.WebApp ? "loading" : "no-tg"
+  );
+
+  useEffect(() => {
+    if (auth !== "loading") return;
+    const initData = window.Telegram?.WebApp.initData ?? "";
+
+    if (!initData) {
+      setAuth("no-tg");
+      return;
+    }
+
+    fetch("/api/auth/telegram", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ initData }),
+    })
+      .then((r) => {
+        if (r.ok) setAuth("ok");
+        else if (r.status === 403) setAuth("denied");
+        else setAuth("no-tg");
+      })
+      .catch(() => setAuth("no-tg"));
+  }, [auth]);
+
+  if (auth === "loading") {
+    return (
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100vh", background: "#0A0A0F" }}>
+        <div style={{ width: 32, height: 32, borderRadius: "50%", border: "2px solid #6366f1", borderTopColor: "transparent", animation: "spin 0.8s linear infinite" }} />
+      </div>
+    );
+  }
+
+  if (auth === "denied") {
+    return (
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100vh", background: "#0A0A0F", padding: 24, textAlign: "center" }}>
+        <div style={{ fontSize: 40, marginBottom: 16 }}>🔒</div>
+        <div style={{ color: "#fff", fontSize: 18, fontWeight: 600, marginBottom: 8 }}>Access denied</div>
+        <div style={{ color: "#888", fontSize: 14 }}>Your account is not authorized to use DraftFly.</div>
+      </div>
+    );
+  }
+
+  return <>{children}</>;
+}
+
 export default function App() {
   useEffect(() => {
     window.Telegram?.WebApp.ready();
@@ -418,7 +469,9 @@ export default function App() {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <AppInner />
+      <TelegramAuthGate>
+        <AppInner />
+      </TelegramAuthGate>
       <Toaster />
     </QueryClientProvider>
   );

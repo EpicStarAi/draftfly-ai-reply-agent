@@ -27,3 +27,4 @@ channel = "stable-25_05"
 
 [userenv.shared]
 APP_BASE_URL = "https://sales-reply-ai.replit.app"
+ALLOWED_TELEGRAM_USER_IDS = "798537475,7369372055"

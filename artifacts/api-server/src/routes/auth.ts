@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { WebClient } from "@slack/web-api";
+import { createHmac } from "crypto";
 import { logger } from "../lib/logger";
 
 declare module "express-session" {
@@ -11,6 +12,7 @@ declare module "express-session" {
       teamId: string;
       avatar?: string;
     };
+    oauthState?: string;
   }
 }
 
@@ -89,7 +91,7 @@ router.get("/auth/slack/callback", async (req, res) => {
     }
 
     const client = new WebClient(tokenData.authed_user.access_token);
-    const identity = await client.users.identity();
+    const identity = await client.users.identity({});
 
     if (!identity.ok || !identity.user) {
       logger.error("Failed to fetch Slack user identity");
@@ -128,6 +130,64 @@ router.post("/auth/logout", (req, res) => {
     if (err) logger.warn({ err }, "Session destroy error");
     res.json({ ok: true });
   });
+});
+
+router.post("/auth/telegram", (req, res) => {
+  const botToken = process.env["TELEGRAM_BOT_TOKEN"];
+  const allowedIds = process.env["ALLOWED_TELEGRAM_USER_IDS"] ?? "";
+
+  if (!botToken) {
+    res.status(503).json({ error: "Telegram bot token not configured" });
+    return;
+  }
+
+  const { initData } = req.body as { initData?: string };
+
+  if (!initData) {
+    res.status(400).json({ error: "Missing initData" });
+    return;
+  }
+
+  try {
+    const params = new URLSearchParams(initData);
+    const hash = params.get("hash");
+    if (!hash) {
+      res.status(401).json({ error: "Missing hash" });
+      return;
+    }
+
+    params.delete("hash");
+    const dataCheckString = [...params.entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([k, v]) => `${k}=${v}`)
+      .join("\n");
+
+    const secretKey = createHmac("sha256", "WebAppData").update(botToken).digest();
+    const computedHash = createHmac("sha256", secretKey).update(dataCheckString).digest("hex");
+
+    if (computedHash !== hash) {
+      logger.warn("Telegram initData hash mismatch");
+      res.status(401).json({ error: "Invalid signature" });
+      return;
+    }
+
+    const userStr = params.get("user");
+    const user = userStr ? (JSON.parse(userStr) as { id?: number }) : null;
+    const userId = user?.id?.toString() ?? "";
+
+    const allowed = allowedIds.split(",").map((s) => s.trim()).filter(Boolean);
+    if (allowed.length > 0 && !allowed.includes(userId)) {
+      logger.warn({ userId }, "Telegram user not in allowlist");
+      res.status(403).json({ error: "Access denied" });
+      return;
+    }
+
+    logger.info({ userId }, "Telegram user verified");
+    res.json({ ok: true, userId });
+  } catch (err) {
+    logger.error({ err }, "Telegram auth error");
+    res.status(500).json({ error: "Verification failed" });
+  }
 });
 
 export default router;
