@@ -2,11 +2,23 @@
 
 FAILED_STEPS=()
 
-pnpm install --frozen-lockfile \
-  || FAILED_STEPS+=("pnpm install")
+run_step() {
+  local name="$1"
+  local timeout_secs="$2"
+  shift 2
+  timeout "$timeout_secs" "$@"
+  local exit_code=$?
+  if [ $exit_code -eq 124 ]; then
+    echo "Warning: step '${name}' timed out after ${timeout_secs}s"
+    FAILED_STEPS+=("${name} (timed out)")
+  elif [ $exit_code -ne 0 ]; then
+    FAILED_STEPS+=("${name}")
+  fi
+}
 
-pnpm --filter db push \
-  || FAILED_STEPS+=("db push")
+run_step "pnpm install" 120 pnpm install --frozen-lockfile
+
+run_step "db push" 90 pnpm --filter db push
 
 if [ ${#FAILED_STEPS[@]} -gt 0 ]; then
   echo "Warning: the following setup steps failed: ${FAILED_STEPS[*]}"
