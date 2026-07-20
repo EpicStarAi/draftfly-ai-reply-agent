@@ -42,6 +42,7 @@ import type {
   Persona,
   PersonaInput,
   PersonaUpdate,
+  ReplyTrendPoint,
   SetupItem,
   SetupItemUpdate
 } from './api.schemas';
@@ -2110,6 +2111,83 @@ export function useListActivity<TData = Awaited<ReturnType<typeof listActivity>>
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getListActivityQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetReplyTrendsUrl = () => {
+
+
+
+
+  return `/api/dashboard/reply-trends`
+}
+
+/**
+ * @summary Reply volume per day broken down by status (last 30 days)
+ */
+export const getReplyTrends = async ( options?: RequestInit): Promise<ReplyTrendPoint[]> => {
+
+  return customFetch<ReplyTrendPoint[]>(getGetReplyTrendsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetReplyTrendsQueryKey = () => {
+    return [
+    `/api/dashboard/reply-trends`
+    ] as const;
+    }
+
+
+export const getGetReplyTrendsQueryOptions = <TData = Awaited<ReturnType<typeof getReplyTrends>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getReplyTrends>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetReplyTrendsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getReplyTrends>>> = ({ signal }) => getReplyTrends({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getReplyTrends>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetReplyTrendsQueryResult = NonNullable<Awaited<ReturnType<typeof getReplyTrends>>>
+export type GetReplyTrendsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Reply volume per day broken down by status (last 30 days)
+ */
+
+export function useGetReplyTrends<TData = Awaited<ReturnType<typeof getReplyTrends>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getReplyTrends>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetReplyTrendsQueryOptions(options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

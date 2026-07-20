@@ -334,6 +334,16 @@ export interface ActivityItem {
   createdAt: string;
 }
 
+export interface ReplyTrendPoint {
+  /** ISO date string (YYYY-MM-DD) */
+  date: string;
+  pending: number;
+  sent: number;
+  edited: number;
+  discarded: number;
+  send_failed: number;
+}
+
 export type ListPersonasParams = {
 clientId?: number;
 };

@@ -1,4 +1,4 @@
-import { useGetDashboardStats, useListPendingDrafts, useListActivity, useListClients } from "@workspace/api-client-react";
+import { useGetDashboardStats, useListPendingDrafts, useListActivity, useListClients, useGetReplyTrends } from "@workspace/api-client-react";
 import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -17,6 +17,16 @@ import {
   Loader2,
   TriangleAlert,
 } from "lucide-react";
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  ResponsiveContainer,
+} from "recharts";
 
 const SLACK_CHANNEL_ID_RE = /^[CG][A-Z0-9]{9,}$/;
 
@@ -55,6 +65,7 @@ export default function Dashboard() {
   const { data: activity, isLoading: activityLoading } = useListActivity({ limit: 10 });
   const { status: integrations, loading: intLoading } = useIntegrationStatus();
   const { data: clients } = useListClients();
+  const { data: replyTrends, isLoading: trendsLoading } = useGetReplyTrends();
 
   const loading = statsLoading || intLoading;
 
@@ -128,6 +139,49 @@ export default function Dashboard() {
           loading={loading}
         />
       </div>
+
+      {/* Reply Trends Chart */}
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base font-semibold">Reply Volume — Last 30 Days</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {trendsLoading ? (
+            <div className="h-52 bg-muted/40 animate-pulse rounded-md" />
+          ) : (
+            <ResponsiveContainer width="100%" height={220}>
+              <BarChart data={replyTrends ?? []} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+                <XAxis
+                  dataKey="date"
+                  tick={{ fontSize: 10 }}
+                  tickLine={false}
+                  axisLine={false}
+                  tickFormatter={(v: string) => {
+                    const d = new Date(v + "T00:00:00");
+                    return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+                  }}
+                  interval={4}
+                />
+                <YAxis tick={{ fontSize: 10 }} tickLine={false} axisLine={false} allowDecimals={false} />
+                <Tooltip
+                  labelFormatter={(label: string) => {
+                    const d = new Date(label + "T00:00:00");
+                    return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+                  }}
+                  contentStyle={{ fontSize: 12 }}
+                />
+                <Legend wrapperStyle={{ fontSize: 11, paddingTop: 8 }} />
+                <Bar dataKey="sent" name="Sent" stackId="a" fill="hsl(142 71% 45%)" radius={[0, 0, 0, 0]} />
+                <Bar dataKey="edited" name="Edited" stackId="a" fill="hsl(217 91% 60%)" />
+                <Bar dataKey="pending" name="Pending" stackId="a" fill="hsl(38 92% 50%)" />
+                <Bar dataKey="discarded" name="Discarded" stackId="a" fill="hsl(0 0% 60%)" />
+                <Bar dataKey="send_failed" name="Send Failed" stackId="a" fill="hsl(0 84% 60%)" radius={[2, 2, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </CardContent>
+      </Card>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
         {/* Left column */}

@@ -41,6 +41,7 @@ export * from './logEntrySource';
 export * from './persona';
 export * from './personaInput';
 export * from './personaUpdate';
+export * from './replyTrendPoint';
 export * from './setupItem';
 export * from './setupItemCategory';
 export * from './setupItemChecklistType';

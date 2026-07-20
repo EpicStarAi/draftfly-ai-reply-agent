@@ -558,6 +558,21 @@ paths:
                 items:
                   $ref: "#/components/schemas/ActivityItem"
 
+  /dashboard/reply-trends:
+    get:
+      operationId: getReplyTrends
+      tags: [dashboard]
+      summary: Reply volume per day broken down by status (last 30 days)
+      responses:
+        "200":
+          description: Reply trends
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ReplyTrendPoint"
+
 components:
   schemas:
     HealthStatus:
@@ -948,3 +963,21 @@ components:
         createdAt:
           type: string
           format: date-time
+
+    ReplyTrendPoint:
+      type: object
+      required: [date, pending, sent, edited, discarded, send_failed]
+      properties:
+        date:
+          type: string
+          description: ISO date string (YYYY-MM-DD)
+        pending:
+          type: integer
+        sent:
+          type: integer
+        edited:
+          type: integer
+        discarded:
+          type: integer
+        send_failed:
+          type: integer

@@ -613,3 +613,17 @@ export const ListActivityResponseItem = zod.object({
 export const ListActivityResponse = zod.array(ListActivityResponseItem)
 
 
+/**
+ * @summary Reply volume per day broken down by status (last 30 days)
+ */
+export const GetReplyTrendsResponseItem = zod.object({
+  "date": zod.string().describe('ISO date string (YYYY-MM-DD)'),
+  "pending": zod.number(),
+  "sent": zod.number(),
+  "edited": zod.number(),
+  "discarded": zod.number(),
+  "send_failed": zod.number()
+})
+export const GetReplyTrendsResponse = zod.array(GetReplyTrendsResponseItem)
+
+
