@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { db, draftsTable, logsTable, campaignsTable, clientsTable, activityTable } from "@workspace/db";
 import {
   verifyIncomingRequest,
@@ -127,6 +127,13 @@ async function processSlackAction(params: {
       }
       return;
     }
+  }
+
+  // On a successful retry from send_failed: remove the stale draft_send_failed activity entry
+  // so the feed shows exactly one draft_sent entry, not a prior failure followed by success.
+  if (draft.status === "send_failed" && newStatus === "sent") {
+    await db.delete(activityTable)
+      .where(and(eq(activityTable.draftId, draftId), eq(activityTable.type, "draft_send_failed")));
   }
 
   // Update draft status
@@ -261,6 +268,13 @@ async function processEditSubmission(params: {
       void updateMessageAfterAction(channel, ts ?? channel, "send_failed", userId, botToken, lemlistError);
     }
     return;
+  }
+
+  // On a successful retry from send_failed via edit modal: remove the stale draft_send_failed
+  // activity entry so the feed shows exactly one draft_sent entry.
+  if (draft.status === "send_failed") {
+    await db.delete(activityTable)
+      .where(and(eq(activityTable.draftId, draftId), eq(activityTable.type, "draft_send_failed")));
   }
 
   // Mark as sent
