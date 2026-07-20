@@ -94,6 +94,30 @@ router.post("/webhooks/lemlist/simulate", async (req, res): Promise<void> => {
   }
 });
 
+// ─── Helpers ────────────────────────────────────────────────────────────────
+
+/**
+ * Claude occasionally wraps its reply in a JSON object like `{"draft":"Hi..."}`.
+ * Strip the wrapper and return just the plain text.
+ */
+function extractDraftText(raw: string): string {
+  const trimmed = raw.trim();
+  if (trimmed.startsWith("{")) {
+    try {
+      const parsed = JSON.parse(trimmed) as Record<string, unknown>;
+      // Accept any top-level string field (draft, reply, text, message, content)
+      for (const key of ["draft", "reply", "text", "message", "content"]) {
+        if (typeof parsed[key] === "string") {
+          return (parsed[key] as string).trim();
+        }
+      }
+    } catch {
+      // Not valid JSON — fall through and return as-is
+    }
+  }
+  return raw;
+}
+
 // ─── Core processing logic ──────────────────────────────────────────────────
 
 async function processLemlistReply(payload: LemlistWebhookPayload): Promise<{
@@ -162,6 +186,7 @@ async function processLemlistReply(payload: LemlistWebhookPayload): Promise<{
   });
 
   // 5. Create draft record
+  const cleanDraft = extractDraftText(draftResult.draft);
   const [draft] = await db.insert(draftsTable).values({
     clientId: client.id,
     campaignId: campaign.id,
@@ -171,7 +196,7 @@ async function processLemlistReply(payload: LemlistWebhookPayload): Promise<{
     prospectCountry: payload.country ?? null,
     prospectRole: payload.jobTitle ?? null,
     conversationSnippet: replyText,
-    replyText: draftResult.draft,
+    replyText: cleanDraft,
     status: "pending",
     // store extra metadata in slackMessageTs field temporarily — will be overwritten
   }).returning();
@@ -185,7 +210,7 @@ async function processLemlistReply(payload: LemlistWebhookPayload): Promise<{
     level: "info",
     message: `Lemlist reply from ${leadName} (${leadEmail}) — draft generated (confidence: ${Math.round(draftResult.confidenceScore * 100)}%)`,
     source: "lemlist",
-    generatedDraft: draftResult.draft,
+    generatedDraft: cleanDraft,
     metadata: JSON.stringify({
       detectedIntent: draftResult.detectedIntent,
       suggestedNextAction: draftResult.suggestedNextAction,
@@ -202,7 +227,7 @@ async function processLemlistReply(payload: LemlistWebhookPayload): Promise<{
     level: "info",
     message: `Claude draft generated — intent: ${draftResult.detectedIntent}, confidence: ${Math.round(draftResult.confidenceScore * 100)}%, next: ${draftResult.suggestedNextAction}`,
     source: "claude",
-    generatedDraft: draftResult.draft,
+    generatedDraft: cleanDraft,
     metadata: JSON.stringify({}),
   });
 
@@ -245,7 +270,7 @@ async function processLemlistReply(payload: LemlistWebhookPayload): Promise<{
       leadCompany: payload.leadCompanyName ?? "",
       leadEmail,
       incomingReply: replyText,
-      generatedDraft: draftResult.draft,
+      generatedDraft: cleanDraft,
       campaignName: campaign.name,
       personaName: persona?.name ?? "SDR",
       region: payload.country ?? "US",
@@ -287,7 +312,7 @@ async function processLemlistReply(payload: LemlistWebhookPayload): Promise<{
 
   return {
     draftId: draft.id,
-    generatedDraft: draftResult.draft,
+    generatedDraft: cleanDraft,
     confidenceScore: draftResult.confidenceScore,
     detectedIntent: draftResult.detectedIntent,
     slackTs,
