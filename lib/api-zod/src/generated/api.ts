@@ -379,7 +379,7 @@ export const GetCampaignStatsResponse = zod.object({
  * @summary List reply drafts
  */
 export const ListDraftsQueryParams = zod.object({
-  "status": zod.enum(['pending', 'sent', 'edited', 'discarded']).optional(),
+  "status": zod.enum(['pending', 'sent', 'edited', 'discarded', 'send_failed']).optional(),
   "clientId": zod.coerce.number().optional(),
   "campaignId": zod.coerce.number().optional()
 })
@@ -396,7 +396,7 @@ export const ListDraftsResponseItem = zod.object({
   "conversationSnippet": zod.string().nullish(),
   "replyText": zod.string(),
   "editedReplyText": zod.string().nullish(),
-  "status": zod.enum(['pending', 'sent', 'edited', 'discarded']),
+  "status": zod.enum(['pending', 'sent', 'edited', 'discarded', 'send_failed']),
   "slackMessageTs": zod.string().nullish(),
   "actionedAt": zod.coerce.date().nullish(),
   "createdAt": zod.coerce.date()
@@ -419,7 +419,7 @@ export const ListPendingDraftsResponseItem = zod.object({
   "conversationSnippet": zod.string().nullish(),
   "replyText": zod.string(),
   "editedReplyText": zod.string().nullish(),
-  "status": zod.enum(['pending', 'sent', 'edited', 'discarded']),
+  "status": zod.enum(['pending', 'sent', 'edited', 'discarded', 'send_failed']),
   "slackMessageTs": zod.string().nullish(),
   "actionedAt": zod.coerce.date().nullish(),
   "createdAt": zod.coerce.date()
@@ -446,7 +446,7 @@ export const GetDraftResponse = zod.object({
   "conversationSnippet": zod.string().nullish(),
   "replyText": zod.string(),
   "editedReplyText": zod.string().nullish(),
-  "status": zod.enum(['pending', 'sent', 'edited', 'discarded']),
+  "status": zod.enum(['pending', 'sent', 'edited', 'discarded', 'send_failed']),
   "slackMessageTs": zod.string().nullish(),
   "actionedAt": zod.coerce.date().nullish(),
   "createdAt": zod.coerce.date()
@@ -477,7 +477,7 @@ export const ApplyDraftActionResponse = zod.object({
   "conversationSnippet": zod.string().nullish(),
   "replyText": zod.string(),
   "editedReplyText": zod.string().nullish(),
-  "status": zod.enum(['pending', 'sent', 'edited', 'discarded']),
+  "status": zod.enum(['pending', 'sent', 'edited', 'discarded', 'send_failed']),
   "slackMessageTs": zod.string().nullish(),
   "actionedAt": zod.coerce.date().nullish(),
   "createdAt": zod.coerce.date()
@@ -604,7 +604,7 @@ export const ListActivityQueryParams = zod.object({
 
 export const ListActivityResponseItem = zod.object({
   "id": zod.number(),
-  "type": zod.enum(['draft_created', 'draft_sent', 'draft_edited', 'draft_discarded', 'webhook_received', 'error']),
+  "type": zod.enum(['draft_created', 'draft_sent', 'draft_edited', 'draft_discarded', 'draft_send_failed', 'webhook_received', 'error']),
   "description": zod.string(),
   "clientName": zod.string().nullish(),
   "campaignName": zod.string().nullish(),

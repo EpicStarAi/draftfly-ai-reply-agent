@@ -20,7 +20,7 @@ const router: IRouter = Router();
 
 async function processSlackAction(params: {
   draftId: number;
-  newStatus: "sent" | "edited" | "discarded";
+  newStatus: "sent" | "edited" | "discarded" | "send_failed";
   actionId: string;
   userId: string;
   teamId: string;
@@ -34,8 +34,9 @@ async function processSlackAction(params: {
     return;
   }
 
-  // Idempotency guard — ignore if already actioned (protects against Slack retries)
-  if (draft.status !== "pending") {
+  // Idempotency guard — ignore if already in a terminal success state (protects against Slack retries).
+  // send_failed drafts are retryable so we allow them through.
+  if (draft.status === "sent" || draft.status === "edited" || draft.status === "discarded") {
     logger.info({ draftId, status: draft.status }, "Draft already actioned — ignoring duplicate Slack interaction");
     return;
   }
@@ -85,8 +86,33 @@ async function processSlackAction(params: {
       finalStatus = "pending" as unknown as "sent";
     }
 
-    // If Lemlist failed, update Slack message with error and bail
+    // If Lemlist failed, mark draft as send_failed, log, write activity, update Slack message
     if (lemlistError) {
+      await db.update(draftsTable)
+        .set({ status: "send_failed", actionedAt: new Date() })
+        .where(eq(draftsTable.id, draftId));
+
+      await db.insert(logsTable).values({
+        clientId: draft.clientId,
+        campaignId: draft.campaignId,
+        draftId: draft.id,
+        leadId: draft.prospectEmail,
+        level: "warning",
+        message: `Slack action ${actionId} by ${userId}: Lemlist send failed — ${lemlistError}`,
+        source: "slack",
+        finalStatus: "send_failed",
+        metadata: JSON.stringify({ userId, teamId, action: actionId, lemlistError }),
+      });
+
+      await db.insert(activityTable).values({
+        type: "draft_send_failed",
+        description: `Lemlist send failed for reply to ${draft.prospectName} (${draft.prospectEmail}): ${lemlistError}`,
+        clientId: draft.clientId,
+        campaignId: draft.campaignId,
+        draftId: draft.id,
+        campaignName: campaign?.name ?? null,
+      });
+
       if (draft.slackMessageTs) {
         const [channel, ts] = draft.slackMessageTs.split("|");
         void updateMessageAfterAction(
@@ -98,16 +124,6 @@ async function processSlackAction(params: {
           lemlistError,
         );
       }
-      await db.insert(logsTable).values({
-        clientId: draft.clientId,
-        campaignId: draft.campaignId,
-        draftId: draft.id,
-        leadId: draft.prospectEmail,
-        level: "warning",
-        message: `Slack action ${actionId} by ${userId}: Lemlist send failed — ${lemlistError}`,
-        source: "slack",
-        metadata: JSON.stringify({ userId, teamId, action: actionId, lemlistError }),
-      });
       return;
     }
   }
@@ -173,8 +189,8 @@ async function processEditSubmission(params: {
     return;
   }
 
-  // Idempotency guard
-  if (draft.status !== "pending") {
+  // Idempotency guard — allow send_failed drafts to be retried via modal resubmit
+  if (draft.status === "sent" || draft.status === "edited" || draft.status === "discarded") {
     logger.info({ draftId, status: draft.status }, "Draft already actioned — ignoring modal submit");
     return;
   }
@@ -214,10 +230,10 @@ async function processEditSubmission(params: {
   }
 
   if (lemlistError) {
-    if (draft.slackMessageTs) {
-      const [channel, ts] = draft.slackMessageTs.split("|");
-      void updateMessageAfterAction(channel, ts ?? channel, "send_failed", userId, botToken, lemlistError);
-    }
+    await db.update(draftsTable)
+      .set({ status: "send_failed", actionedAt: new Date() })
+      .where(eq(draftsTable.id, draftId));
+
     await db.insert(logsTable).values({
       clientId: draft.clientId,
       campaignId: draft.campaignId,
@@ -226,8 +242,23 @@ async function processEditSubmission(params: {
       level: "warning",
       message: `Slack modal edit submit by ${userId}: Lemlist send failed — ${lemlistError}`,
       source: "slack",
+      finalStatus: "send_failed",
       metadata: JSON.stringify({ userId, teamId, action: "draft_edit_modal", lemlistError }),
     });
+
+    await db.insert(activityTable).values({
+      type: "draft_send_failed",
+      description: `Lemlist send failed for edited reply to ${draft.prospectName} (${draft.prospectEmail}): ${lemlistError}`,
+      clientId: draft.clientId,
+      campaignId: draft.campaignId,
+      draftId: draft.id,
+      campaignName: campaign?.name ?? null,
+    });
+
+    if (draft.slackMessageTs) {
+      const [channel, ts] = draft.slackMessageTs.split("|");
+      void updateMessageAfterAction(channel, ts ?? channel, "send_failed", userId, botToken, lemlistError);
+    }
     return;
   }
 

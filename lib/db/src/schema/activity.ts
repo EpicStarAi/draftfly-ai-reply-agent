@@ -7,6 +7,7 @@ export const activityTypeEnum = pgEnum("activity_type", [
   "draft_sent",
   "draft_edited",
   "draft_discarded",
+  "draft_send_failed",
   "webhook_received",
   "error",
 ]);

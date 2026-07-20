@@ -14,4 +14,5 @@ export const ListDraftsStatus = {
   sent: 'sent',
   edited: 'edited',
   discarded: 'discarded',
+  send_failed: 'send_failed',
 } as const;

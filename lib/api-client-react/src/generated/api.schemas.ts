@@ -168,6 +168,7 @@ export const DraftStatus = {
   sent: 'sent',
   edited: 'edited',
   discarded: 'discarded',
+  send_failed: 'send_failed',
 } as const;
 
 export interface Draft {
@@ -317,6 +318,7 @@ export const ActivityItemType = {
   draft_sent: 'draft_sent',
   draft_edited: 'draft_edited',
   draft_discarded: 'draft_discarded',
+  draft_send_failed: 'draft_send_failed',
   webhook_received: 'webhook_received',
   error: 'error',
 } as const;
@@ -354,6 +356,7 @@ export const ListDraftsStatus = {
   sent: 'sent',
   edited: 'edited',
   discarded: 'discarded',
+  send_failed: 'send_failed',
 } as const;
 
 export type ListLogsParams = {

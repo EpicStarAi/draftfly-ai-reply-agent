@@ -4,7 +4,7 @@ import { z } from "zod/v4";
 
 export const logLevelEnum = pgEnum("log_level", ["info", "warning", "error"]);
 export const logSourceEnum = pgEnum("log_source", ["lemlist", "n8n", "claude", "slack", "system"]);
-export const logFinalStatusEnum = pgEnum("log_final_status", ["draft", "sent", "edited", "discarded"]);
+export const logFinalStatusEnum = pgEnum("log_final_status", ["draft", "sent", "edited", "discarded", "send_failed"]);
 
 export const logsTable = pgTable("logs", {
   id: serial("id").primaryKey(),

@@ -59,6 +59,7 @@ export default function DraftsPage() {
               <SelectItem value="sent">Sent</SelectItem>
               <SelectItem value="edited">Edited</SelectItem>
               <SelectItem value="discarded">Discarded</SelectItem>
+              <SelectItem value="send_failed">Send Failed</SelectItem>
             </SelectContent>
           </Select>
         </div>

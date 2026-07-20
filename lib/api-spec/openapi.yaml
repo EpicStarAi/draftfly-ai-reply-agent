@@ -341,7 +341,7 @@ paths:
           in: query
           schema:
             type: string
-            enum: [pending, sent, edited, discarded]
+            enum: [pending, sent, edited, discarded, send_failed]
         - name: clientId
           in: query
           schema:
@@ -822,7 +822,7 @@ components:
           type: ["string", "null"]
         status:
           type: string
-          enum: [pending, sent, edited, discarded]
+          enum: [pending, sent, edited, discarded, send_failed]
         slackMessageTs:
           type: ["string", "null"]
         actionedAt:
@@ -938,7 +938,7 @@ components:
           type: integer
         type:
           type: string
-          enum: [draft_created, draft_sent, draft_edited, draft_discarded, webhook_received, error]
+          enum: [draft_created, draft_sent, draft_edited, draft_discarded, draft_send_failed, webhook_received, error]
         description:
           type: string
         clientName:

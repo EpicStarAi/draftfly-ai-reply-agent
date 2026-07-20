@@ -14,6 +14,7 @@ export const ActivityItemType = {
   draft_sent: 'draft_sent',
   draft_edited: 'draft_edited',
   draft_discarded: 'draft_discarded',
+  draft_send_failed: 'draft_send_failed',
   webhook_received: 'webhook_received',
   error: 'error',
 } as const;
