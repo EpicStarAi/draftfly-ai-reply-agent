@@ -1,0 +1,1 @@
+- [Stripe billing setup](stripe-setup.md) — plans seeded; migration must run standalone before first server start (bundled __dirname2 path issue)
