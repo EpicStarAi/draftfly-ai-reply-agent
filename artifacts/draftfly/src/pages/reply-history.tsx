@@ -3,7 +3,9 @@ import { useState } from "react";
 import { Link } from "wouter";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { DraftStatusBadge } from "@/components/status-badges";
+import { Download } from "lucide-react";
 
 export default function ReplyHistoryPage() {
   const [statusFilter, setStatusFilter] = useState<string>("all");
@@ -39,6 +41,39 @@ export default function ReplyHistoryPage() {
   const campaignMap = new Map(campaigns?.map((c) => [c.id, c.name]) ?? []);
   const clientMap = new Map(clients?.map((c) => [c.id, c.name]) ?? []);
 
+  function csvCell(value: string | null | undefined): string {
+    let str = value ?? "";
+    if (/^[=+\-@\t\r]/.test(str)) {
+      str = `\t${str}`;
+    }
+    return `"${str.replace(/"/g, '""')}"`;
+  }
+
+  function exportToCSV() {
+    const headers = ["Received", "Lead Name", "Lead Email", "Campaign", "Status", "Draft Text", "Actioned At"];
+    const rows = sortedDrafts.map((draft) => {
+      const finalText = draft.editedReplyText ?? draft.replyText;
+      const campaignName = campaignMap.get(draft.campaignId) ?? `Campaign ${draft.campaignId}`;
+      return [
+        csvCell(formatTime(draft.createdAt)),
+        csvCell(draft.prospectName),
+        csvCell(draft.prospectEmail),
+        csvCell(campaignName),
+        csvCell(draft.status),
+        csvCell(finalText),
+        csvCell(draft.actionedAt ? formatTime(draft.actionedAt) : ""),
+      ].join(",");
+    });
+    const csv = [headers.map(csvCell).join(","), ...rows].join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `reply-history-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -49,6 +84,17 @@ export default function ReplyHistoryPage() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={exportToCSV}
+            disabled={sortedDrafts.length === 0}
+            className="gap-1.5"
+          >
+            <Download className="h-3.5 w-3.5" />
+            Export CSV
+          </Button>
+
           <Select value={clientFilter} onValueChange={(v) => { setClientFilter(v); setCampaignFilter("all"); }}>
             <SelectTrigger className="w-[160px]">
               <SelectValue placeholder="All Clients" />
