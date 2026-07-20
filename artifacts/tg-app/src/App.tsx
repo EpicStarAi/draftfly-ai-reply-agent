@@ -298,8 +298,7 @@ function AppInner() {
     <div className="app">
       <header className="app-header">
         <div className="logo">
-          <span className="logo-icon">⚡</span>
-          <span className="logo-text">DraftFly</span>
+          <img src="/logo.png" alt="DraftFly" className="logo-img" />
         </div>
         {userName && <span className="user-name">Hi, {userName}</span>}
       </header>

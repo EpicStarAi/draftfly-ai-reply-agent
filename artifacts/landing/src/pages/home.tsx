@@ -279,11 +279,8 @@ export default function Home() {
       {/* Navigation */}
       <nav className="fixed top-0 left-0 right-0 z-50 border-b border-white/5 bg-background/80 backdrop-blur-md">
         <div className="container mx-auto px-6 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="w-6 h-6 rounded-sm bg-primary flex items-center justify-center">
-              <Zap className="w-3.5 h-3.5 text-white" />
-            </div>
-            <span className="font-semibold text-lg tracking-tight">DraftFly</span>
+          <div className="flex items-center">
+            <img src="/logo.png" alt="DraftFly" className="h-7 w-auto" />
           </div>
           <div className="flex items-center gap-4">
             <a
@@ -673,11 +670,8 @@ export default function Home() {
       {/* Footer */}
       <footer className="border-t border-white/10 py-12 px-6 bg-background">
         <div className="container mx-auto flex flex-col md:flex-row items-center justify-between gap-6">
-          <div className="flex items-center gap-2">
-            <div className="w-5 h-5 rounded-sm bg-primary/20 flex items-center justify-center border border-primary/30">
-              <Zap className="w-3 h-3 text-primary" />
-            </div>
-            <span className="font-medium text-white/80">DraftFly</span>
+          <div className="flex items-center">
+            <img src="/logo.png" alt="DraftFly" className="h-5 w-auto opacity-70" />
           </div>
           <div className="flex gap-6 text-sm text-muted-foreground">
             <a href="https://draftfly.app" className="hover:text-white transition-colors">draftfly.app</a>

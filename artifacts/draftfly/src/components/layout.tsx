@@ -28,10 +28,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
       <div className="flex min-h-screen w-full bg-background font-sans text-foreground">
         <Sidebar className="border-r border-border bg-card">
           <SidebarHeader className="p-4 border-b border-border flex flex-row items-center gap-2">
-            <div className="w-6 h-6 bg-primary rounded shadow-sm flex items-center justify-center">
-              <span className="text-primary-foreground font-bold text-xs">D</span>
-            </div>
-            <span className="font-semibold text-sm tracking-tight uppercase">DRAFTFLY</span>
+            <img src="/logo.png" alt="DraftFly" className="h-6 w-auto" />
           </SidebarHeader>
           <SidebarContent>
             <SidebarGroup>
