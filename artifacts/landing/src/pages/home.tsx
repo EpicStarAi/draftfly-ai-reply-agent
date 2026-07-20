@@ -283,11 +283,17 @@ export default function Home() {
             <img src="/logo.png" alt="DraftFly" className="h-7 w-auto" />
           </div>
           <div className="flex items-center gap-4">
+            <button
+              onClick={() => document.getElementById("pricing")?.scrollIntoView({ behavior: "smooth" })}
+              className="text-sm text-muted-foreground hover:text-foreground transition-colors hidden sm:block"
+            >
+              Pricing
+            </button>
             <a
               href={DASHBOARD_URL}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+              className="text-sm text-muted-foreground hover:text-foreground transition-colors hidden sm:block"
             >
               Sign in
             </a>
@@ -329,7 +335,7 @@ export default function Home() {
                 variants={fadeIn}
                 className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto mb-10 leading-relaxed"
               >
-                DraftFly intercepts cold email replies, drafts AI-powered responses, and routes them to Slack for human approval. A professional weapon for high-output revenue teams.
+                You send cold emails via Lemlist. A prospect replies. DraftFly instantly drafts the perfect response with Claude AI and sends it to your Slack for one-click approval — before you even open your inbox.
               </motion.p>
 
               <motion.div
@@ -545,6 +551,115 @@ export default function Home() {
                 </motion.div>
               ))}
             </div>
+          </div>
+        </section>
+
+        {/* Pricing */}
+        <section id="pricing" className="py-24 px-6 relative">
+          <div className="container mx-auto max-w-6xl">
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.6 }}
+              className="text-center mb-16"
+            >
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/5 border border-white/10 text-xs font-medium text-muted-foreground mb-6">
+                Pricing
+              </div>
+              <h2 className="text-3xl md:text-4xl font-bold tracking-tight mb-4">Simple, transparent pricing</h2>
+              <p className="text-muted-foreground text-lg max-w-2xl mx-auto">Pay monthly, cancel anytime. All plans include a 7-day free trial.</p>
+            </motion.div>
+
+            <div className="grid md:grid-cols-3 gap-6">
+              {[
+                {
+                  name: "Starter",
+                  price: "$49",
+                  desc: "For solo operators and small teams getting started with AI-assisted replies.",
+                  features: ["1 Lemlist account", "Up to 500 replies / mo", "1 Slack channel", "Claude AI drafting", "Email support"],
+                  cta: "Get Early Access",
+                  highlight: false,
+                },
+                {
+                  name: "Growth",
+                  price: "$149",
+                  desc: "For active sales teams running multiple campaigns simultaneously.",
+                  features: ["3 Lemlist accounts", "Up to 2,000 replies / mo", "Multiple Slack channels", "Persona library", "Priority support"],
+                  cta: "Get Early Access",
+                  highlight: true,
+                },
+                {
+                  name: "Agency",
+                  price: "$399",
+                  desc: "For agencies managing outreach across multiple clients and brands.",
+                  features: ["Unlimited accounts", "Unlimited replies", "Client workspaces", "Custom personas", "Dedicated onboarding"],
+                  cta: "Talk to us",
+                  highlight: false,
+                },
+              ].map((plan, i) => (
+                <motion.div
+                  key={i}
+                  initial={{ opacity: 0, y: 20 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true }}
+                  transition={{ duration: 0.5, delay: i * 0.1 }}
+                  className={`relative rounded-2xl border p-8 flex flex-col ${plan.highlight ? "border-primary bg-primary/5" : "border-white/10 bg-card"}`}
+                >
+                  {plan.highlight && (
+                    <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-4 py-1 rounded-full bg-primary text-white text-xs font-semibold">
+                      Most popular
+                    </div>
+                  )}
+                  <div className="mb-6">
+                    <h3 className="text-lg font-semibold text-white mb-1">{plan.name}</h3>
+                    <div className="flex items-end gap-1 mb-3">
+                      <span className="text-4xl font-bold text-white">{plan.price}</span>
+                      <span className="text-muted-foreground mb-1">/month</span>
+                    </div>
+                    <p className="text-sm text-muted-foreground leading-relaxed">{plan.desc}</p>
+                  </div>
+                  <ul className="space-y-3 mb-8 flex-1">
+                    {plan.features.map((f, j) => (
+                      <li key={j} className="flex items-center gap-3 text-sm text-white/80">
+                        <CheckCircle className="w-4 h-4 text-primary shrink-0" />
+                        {f}
+                      </li>
+                    ))}
+                  </ul>
+                  <Button
+                    size="lg"
+                    variant={plan.highlight ? "default" : "outline"}
+                    className={`w-full ${!plan.highlight ? "border-white/10 hover:bg-white/5 bg-transparent" : ""}`}
+                    onClick={() => document.getElementById("early-access")?.scrollIntoView({ behavior: "smooth" })}
+                  >
+                    {plan.cta}
+                  </Button>
+                </motion.div>
+              ))}
+            </div>
+
+            {/* Requirements callout */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.6, delay: 0.3 }}
+              className="mt-12 rounded-xl border border-white/10 bg-white/[0.02] p-6 flex flex-col md:flex-row items-start md:items-center gap-6"
+            >
+              <div className="flex-1">
+                <p className="text-sm font-semibold text-white mb-1">What you need to get started</p>
+                <p className="text-sm text-muted-foreground">DraftFly sits on top of your existing tools — no infrastructure changes needed.</p>
+              </div>
+              <div className="flex flex-wrap gap-3">
+                {["Lemlist account", "Slack workspace", "That's it"].map((req, i) => (
+                  <div key={i} className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium ${i === 2 ? "bg-primary/10 text-primary border border-primary/20" : "bg-white/5 border border-white/10 text-white/80"}`}>
+                    <CheckCircle className="w-3.5 h-3.5" />
+                    {req}
+                  </div>
+                ))}
+              </div>
+            </motion.div>
           </div>
         </section>
 
