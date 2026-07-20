@@ -11,7 +11,7 @@ async function getStripeCredentials(): Promise<{ secretKey: string; webhookSecre
 
   if (!hostname || !xReplitToken) {
     throw new Error(
-      "Missing Replit environment variables. " +
+      `Missing Replit environment variables (hostname=${hostname ? "set" : "missing"}, token=${xReplitToken ? "set" : "missing"}). ` +
       "Ensure the Stripe integration is connected via the Integrations tab.",
     );
   }
@@ -19,7 +19,7 @@ async function getStripeCredentials(): Promise<{ secretKey: string; webhookSecre
   const resp = await fetch(
     `https://${hostname}/api/v2/connection?include_secrets=true&connector_names=stripe`,
     {
-      headers: { Accept: "application/json", X_REPLIT_TOKEN: xReplitToken },
+      headers: { Accept: "application/json", "X-Replit-Token": xReplitToken },
       signal: AbortSignal.timeout(10_000),
     },
   );
