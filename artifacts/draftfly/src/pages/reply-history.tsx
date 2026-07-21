@@ -6,6 +6,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { DraftStatusBadge } from "@/components/status-badges";
 import { Download, Link2, Check } from "lucide-react";
+import { buildCSV } from "@/lib/csv-utils";
 
 function getInitialFilters(search: string) {
   const params = new URLSearchParams(search);
@@ -77,33 +78,22 @@ export default function ReplyHistoryPage() {
   const campaignMap = new Map(campaigns?.map((c) => [c.id, c.name]) ?? []);
   const clientMap = new Map(clients?.map((c) => [c.id, c.name]) ?? []);
 
-  function csvCell(value: string | null | undefined): string {
-    let str = value ?? "";
-    str = str.replace(/\r\n|\r|\n/g, " ");
-    if (/^[=+\-@\t\r]/.test(str)) {
-      str = `\t${str}`;
-    }
-    return `"${str.replace(/"/g, '""')}"`;
-  }
-
   function exportToCSV() {
-    const headers = ["Received", "Lead Name", "Lead Email", "Campaign", "Status", "Draft Text", "Actioned At"];
-    const rows = sortedDrafts.map((draft) => {
+    const csvRows = sortedDrafts.map((draft) => {
       const finalText = draft.editedReplyText ?? draft.replyText;
       const campaignName = campaignMap.get(draft.campaignId) ?? `Campaign ${draft.campaignId}`;
-      return [
-        csvCell(formatTime(draft.createdAt)),
-        csvCell(draft.prospectName),
-        csvCell(draft.prospectEmail),
-        csvCell(campaignName),
-        csvCell(draft.status),
-        csvCell(finalText),
-        csvCell(draft.actionedAt ? formatTime(draft.actionedAt) : ""),
-      ].join(",");
+      return {
+        received: formatTime(draft.createdAt),
+        leadName: draft.prospectName,
+        leadEmail: draft.prospectEmail,
+        campaign: campaignName,
+        status: draft.status,
+        draftText: finalText,
+        actionedAt: draft.actionedAt ? formatTime(draft.actionedAt) : "",
+      };
     });
-    const csv = [headers.map(csvCell).join(","), ...rows].join("\r\n");
-    const BOM = "\uFEFF";
-    const blob = new Blob([BOM + csv], { type: "text/csv;charset=utf-8;" });
+    const csv = buildCSV(csvRows);
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
