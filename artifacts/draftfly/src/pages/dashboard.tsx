@@ -123,6 +123,28 @@ export default function Dashboard() {
   // New placeholder clients (IDs not yet acked) break through the dismissal.
   const [ackedIds, setAckedIds] = useState<Set<string>>(() => getAckedIds());
 
+  // Prune stale acks: remove any stored ID that is no longer a placeholder client
+  // (the client was fixed or deleted). Runs once after the clients list loads.
+  useEffect(() => {
+    if (!clients) return;
+    const currentPlaceholderIds = new Set(
+      (clients ?? []).filter((c) => isPlaceholderChannel(c.slackChannel)).map((c) => String(c.id))
+    );
+    const stored = getAckedIds();
+    const pruned = new Set<string>();
+    for (const id of stored) {
+      if (currentPlaceholderIds.has(id)) pruned.add(id);
+    }
+    if (pruned.size !== stored.size) {
+      try {
+        localStorage.setItem(PLACEHOLDER_ACK_KEY, JSON.stringify([...pruned]));
+      } catch {
+        // ignore storage errors
+      }
+      setAckedIds(pruned);
+    }
+  }, [clients]);
+
   const unackedPlaceholders = placeholderClients.filter((c) => !ackedIds.has(String(c.id)));
   const showBanner = unackedPlaceholders.length > 0;
 
