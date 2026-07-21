@@ -158,7 +158,7 @@ describe("POST /api/clients — Slack channel ID guard", () => {
       {
         id: 2,
         name: "Acme",
-        company: null,
+        company: "Acme Corp",
         slackChannel: "G1234567890",
         slackWorkspaceId: null,
         slackBotToken: null,
@@ -203,7 +203,7 @@ describe("PATCH /api/clients/:id — Slack channel ID guard", () => {
     const updatedRow = {
       id: 1,
       name: "Acme",
-      company: null,
+      company: "Acme Corp",
       slackChannel: "C0BK6NPBHKJ",
       slackWorkspaceId: null,
       slackBotToken: null,

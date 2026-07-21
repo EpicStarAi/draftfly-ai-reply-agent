@@ -467,7 +467,7 @@ describe("POST /api/slack/actions — send_failed Slack card update", () => {
 
     // Confirm no send_failed call was made
     const sendFailedCall = mockUpdateMessageAfterAction.mock.calls.find(
-      (args) => args[2] === "send_failed",
+      (args) => (args as unknown[])[2] === "send_failed",
     );
     expect(sendFailedCall).toBeUndefined();
   });
