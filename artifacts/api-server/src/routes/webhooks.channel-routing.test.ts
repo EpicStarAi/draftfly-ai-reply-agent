@@ -49,6 +49,8 @@ vi.mock("drizzle-orm", () => ({
 
 vi.mock("../lib/claude", () => ({
   generateDraftReply: mockGenerateDraftReply,
+  isValidDraftText: vi.fn(() => true),
+  extractDraftText: vi.fn((t: string) => t),
 }));
 
 vi.mock("../lib/slack", () => ({
