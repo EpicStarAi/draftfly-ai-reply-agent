@@ -234,7 +234,7 @@ describe("Slack channel routing — save via PATCH, verify on webhook", () => {
     // Step 3 — assert postApprovalCard was called with the saved channel, not
     // the global env var or the original empty value
     expect(mockPostApprovalCard).toHaveBeenCalledOnce();
-    const callArgs = mockPostApprovalCard.mock.calls[0][0] as { channelId: string };
+    const callArgs = (mockPostApprovalCard.mock.calls as unknown as [[{ channelId: string }]])[0][0];
     expect(callArgs.channelId).toBe("C0BK6NPBHKJ");
     expect(callArgs.channelId).not.toBe("C1GLOBALCHN1");
     expect(callArgs.channelId).not.toBe("");
@@ -252,7 +252,7 @@ describe("Slack channel routing — save via PATCH, verify on webhook", () => {
 
     expect(res.status).toBe(200);
     expect(mockPostApprovalCard).toHaveBeenCalledOnce();
-    const callArgs = mockPostApprovalCard.mock.calls[0][0] as { channelId: string };
+    const callArgs = (mockPostApprovalCard.mock.calls as unknown as [[{ channelId: string }]])[0][0];
     expect(callArgs.channelId).toBe("C0BK6NPBHKJ");
     expect(callArgs.channelId).not.toBe("C1GLOBALCHN1");
   });
@@ -269,7 +269,7 @@ describe("Slack channel routing — save via PATCH, verify on webhook", () => {
 
     expect(res.status).toBe(200);
     expect(mockPostApprovalCard).toHaveBeenCalledOnce();
-    const callArgs = mockPostApprovalCard.mock.calls[0][0] as { channelId: string };
+    const callArgs = (mockPostApprovalCard.mock.calls as unknown as [[{ channelId: string }]])[0][0];
     expect(callArgs.channelId).toBe("C1GLOBALCHN1");
     expect(callArgs.channelId).not.toBe("#general");
   });
@@ -284,7 +284,7 @@ describe("Slack channel routing — save via PATCH, verify on webhook", () => {
 
     expect(res.status).toBe(200);
     expect(mockPostApprovalCard).toHaveBeenCalledOnce();
-    const callArgs = mockPostApprovalCard.mock.calls[0][0] as { channelId: string };
+    const callArgs = (mockPostApprovalCard.mock.calls as unknown as [[{ channelId: string }]])[0][0];
     expect(callArgs.channelId).toBe("C1GLOBALCHN1");
   });
 
@@ -298,7 +298,7 @@ describe("Slack channel routing — save via PATCH, verify on webhook", () => {
 
     expect(res.status).toBe(200);
     expect(mockPostApprovalCard).toHaveBeenCalledOnce();
-    const callArgs = mockPostApprovalCard.mock.calls[0][0] as { channelId: string };
+    const callArgs = (mockPostApprovalCard.mock.calls as unknown as [[{ channelId: string }]])[0][0];
     expect(callArgs.channelId).toBe("C0BK6NPBHKJ");
   });
 });
