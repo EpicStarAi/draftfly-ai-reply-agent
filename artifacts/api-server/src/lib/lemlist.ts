@@ -104,30 +104,61 @@ async function lemlistFetch(path: string, options?: RequestInit): Promise<Respon
   });
 }
 
-export async function testConnection(): Promise<{ ok: boolean; error?: string }> {
+export const TEST_CONNECTION_TIMEOUT_MS = 10_000;
+export const GET_CAMPAIGNS_TIMEOUT_MS = 15_000;
+
+export async function testConnection(opts?: {
+  /** Override the default 10 s timeout — useful in tests. */
+  timeoutMs?: number;
+}): Promise<{ ok: boolean; error?: string }> {
   if (!isLemlistConfigured()) {
     return { ok: false, error: "LEMLIST_API_KEY is not configured" };
   }
+  const timeoutMs = opts?.timeoutMs ?? TEST_CONNECTION_TIMEOUT_MS;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const res = await lemlistFetch("/campaigns?limit=1");
+    const res = await lemlistFetch("/campaigns?limit=1", { signal: controller.signal });
     if (res.ok) return { ok: true };
     const body = await res.text();
     return { ok: false, error: `HTTP ${res.status}: ${body}` };
   } catch (err) {
+    if (err instanceof Error && (err.name === "AbortError" || err.name === "TimeoutError")) {
+      logger.error({ timeoutMs }, "Lemlist testConnection timed out — no response within the allowed window");
+      return { ok: false, error: "timeout" };
+    }
     const msg = err instanceof Error ? err.message : String(err);
     logger.error({ err }, "Lemlist connection test failed");
     return { ok: false, error: msg };
+  } finally {
+    clearTimeout(timer);
   }
 }
 
-export async function getCampaigns(): Promise<LemlistCampaign[]> {
+export async function getCampaigns(opts?: {
+  /** Override the default 15 s timeout — useful in tests. */
+  timeoutMs?: number;
+}): Promise<LemlistCampaign[]> {
   if (!isLemlistConfigured()) {
     throw new Error("LEMLIST_API_KEY is not configured. Add it to Replit Secrets to fetch campaigns.");
   }
-  const res = await lemlistFetch("/campaigns");
-  if (!res.ok) throw new Error(`Lemlist API error: HTTP ${res.status}`);
-  const data = await res.json() as { campaigns?: LemlistCampaign[] } | LemlistCampaign[];
-  return Array.isArray(data) ? data : (data.campaigns ?? []);
+  const timeoutMs = opts?.timeoutMs ?? GET_CAMPAIGNS_TIMEOUT_MS;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await lemlistFetch("/campaigns", { signal: controller.signal });
+    if (!res.ok) throw new Error(`Lemlist API error: HTTP ${res.status}`);
+    const data = await res.json() as { campaigns?: LemlistCampaign[] } | LemlistCampaign[];
+    return Array.isArray(data) ? data : (data.campaigns ?? []);
+  } catch (err) {
+    if (err instanceof Error && (err.name === "AbortError" || err.name === "TimeoutError")) {
+      logger.error({ timeoutMs }, "Lemlist getCampaigns timed out — no response within the allowed window");
+      throw new Error("timeout");
+    }
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 export const SEND_REPLY_TIMEOUT_MS = 30_000;

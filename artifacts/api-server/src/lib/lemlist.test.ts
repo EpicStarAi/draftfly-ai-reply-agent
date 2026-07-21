@@ -11,7 +11,7 @@ import { vi, describe, it, expect, beforeEach, afterEach } from "vitest";
 const mockFetch = vi.fn<typeof fetch>();
 vi.stubGlobal("fetch", mockFetch);
 
-import { sendReply } from "./lemlist";
+import { sendReply, testConnection, getCampaigns } from "./lemlist";
 
 /** Builds a fetch mock that never resolves but rejects with AbortError when the
  * request's AbortSignal fires. */
@@ -115,5 +115,90 @@ describe("sendReply — AbortSignal timeout", () => {
         timeoutMs: 5_000,
       }),
     ).rejects.toThrow("ECONNREFUSED");
+  });
+});
+
+describe("testConnection — AbortSignal timeout", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    process.env.LEMLIST_API_KEY = "test-key-for-timeout-tests";
+  });
+
+  afterEach(() => {
+    delete process.env.LEMLIST_API_KEY;
+  });
+
+  it("returns { ok: false, error: 'timeout' } when fetch hangs beyond timeoutMs", async () => {
+    mockFetch.mockImplementation(makeHangingFetchMock());
+
+    const result = await testConnection({ timeoutMs: 50 });
+
+    expect(result.ok).toBe(false);
+    expect(result.error).toBe("timeout");
+  });
+
+  it("returns { ok: true } when fetch resolves before timeoutMs", async () => {
+    mockFetch.mockImplementation(makeDelayedFetchMock(0, 200));
+
+    const result = await testConnection({ timeoutMs: 5_000 });
+
+    expect(result.ok).toBe(true);
+    expect(result.error).toBeUndefined();
+  });
+
+  it("returns { ok: false, error: 'timeout' } when fetch resolves only after timeoutMs", async () => {
+    mockFetch.mockImplementation(makeDelayedFetchMock(300, 200));
+
+    const result = await testConnection({ timeoutMs: 50 });
+
+    expect(result.ok).toBe(false);
+    expect(result.error).toBe("timeout");
+  });
+
+  it("returns { ok: false } with HTTP error text on non-OK response", async () => {
+    mockFetch.mockImplementation(makeDelayedFetchMock(0, 401));
+
+    const result = await testConnection({ timeoutMs: 5_000 });
+
+    expect(result.ok).toBe(false);
+    expect(result.error).toMatch(/401/);
+  });
+});
+
+describe("getCampaigns — AbortSignal timeout", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    process.env.LEMLIST_API_KEY = "test-key-for-timeout-tests";
+  });
+
+  afterEach(() => {
+    delete process.env.LEMLIST_API_KEY;
+  });
+
+  it("throws 'timeout' when fetch hangs beyond timeoutMs", async () => {
+    mockFetch.mockImplementation(makeHangingFetchMock());
+
+    await expect(getCampaigns({ timeoutMs: 50 })).rejects.toThrow("timeout");
+  });
+
+  it("returns campaign array when fetch resolves before timeoutMs", async () => {
+    const campaigns = [{ _id: "cam_1", name: "Q3 Outreach", status: "active" }];
+    mockFetch.mockResolvedValue(new Response(JSON.stringify(campaigns), { status: 200 }));
+
+    const result = await getCampaigns({ timeoutMs: 5_000 });
+
+    expect(result).toEqual(campaigns);
+  });
+
+  it("throws 'timeout' when fetch resolves only after timeoutMs", async () => {
+    mockFetch.mockImplementation(makeDelayedFetchMock(300, 200));
+
+    await expect(getCampaigns({ timeoutMs: 50 })).rejects.toThrow("timeout");
+  });
+
+  it("still throws non-abort errors rather than swallowing them", async () => {
+    mockFetch.mockRejectedValue(new Error("ECONNREFUSED"));
+
+    await expect(getCampaigns({ timeoutMs: 5_000 })).rejects.toThrow("ECONNREFUSED");
   });
 });
