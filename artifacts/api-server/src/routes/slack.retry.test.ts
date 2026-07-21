@@ -339,7 +339,118 @@ describe("send_failed draft retry path", () => {
     expect(insertedTypes).not.toContain("draft_send_failed");
   });
 
-  // ── 5. Idempotency: already-actioned draft is ignored ─────────────────────
+  // ── 5. Activity feed net state: exactly one entry per draft after retry ───
+
+  it("activity feed ends up with exactly one draft_sent entry and no draft_send_failed after a successful retry via Send", async () => {
+    // The stale draft_send_failed entry exists in the DB (draft.status === "send_failed").
+    // After a successful retry the server must:
+    //   a) delete the stale draft_send_failed activity row scoped to this draftId (one db.delete call)
+    //   b) insert exactly one draft_sent activity row scoped to this draftId
+    //   c) insert zero draft_send_failed activity rows
+    // Net result: the dashboard feed for this draft shows exactly one entry — sent, not failed.
+
+    mocks.sendReply.mockResolvedValue({ ok: true });
+
+    await request(app)
+      .post("/api/slack/actions")
+      .type("form")
+      .send(sendActionBody());
+
+    await flushAsync();
+
+    // (a) exactly one delete was issued — for the stale failure entry of this specific draft
+    expect(mocks.dbDeleteWheres).toHaveLength(1);
+    // The delete condition must target draftId 42 and type "draft_send_failed"
+    type DeleteCondition = { _and: Array<{ _val: unknown }> };
+    const deleteCondition = mocks.dbDeleteWheres[0] as DeleteCondition;
+    const deleteVals = deleteCondition._and.map((a) => a._val);
+    expect(deleteVals).toContain(42);            // scoped to this draftId
+    expect(deleteVals).toContain("draft_send_failed"); // only removes the failure entry
+
+    const activityInserts = mocks.dbInsertValues.filter(
+      (v) =>
+        (v as { type?: string }).type === "draft_sent" ||
+        (v as { type?: string }).type === "draft_send_failed",
+    );
+
+    // (b) exactly one draft_sent was inserted, scoped to this draftId
+    const sentInserts = activityInserts.filter(
+      (v) => (v as { type?: string }).type === "draft_sent",
+    );
+    expect(sentInserts).toHaveLength(1);
+    expect((sentInserts[0] as { draftId?: number }).draftId).toBe(42);
+
+    // (c) no draft_send_failed was inserted (success path only)
+    const failedInserts = activityInserts.filter(
+      (v) => (v as { type?: string }).type === "draft_send_failed",
+    );
+    expect(failedInserts).toHaveLength(0);
+  });
+
+  it("activity feed ends up with exactly one draft_sent entry and no draft_send_failed after a successful retry via Edit modal", async () => {
+    mocks.sendReply.mockResolvedValue({ ok: true });
+
+    await request(app)
+      .post("/api/slack/actions")
+      .type("form")
+      .send(editModalSubmitBody());
+
+    await flushAsync();
+
+    // stale failure entry was removed — delete scoped to draftId 42
+    expect(mocks.dbDeleteWheres).toHaveLength(1);
+    type DeleteCondition = { _and: Array<{ _val: unknown }> };
+    const deleteCondition = mocks.dbDeleteWheres[0] as DeleteCondition;
+    const deleteVals = deleteCondition._and.map((a) => a._val);
+    expect(deleteVals).toContain(42);
+    expect(deleteVals).toContain("draft_send_failed");
+
+    const activityInserts = mocks.dbInsertValues.filter(
+      (v) =>
+        (v as { type?: string }).type === "draft_sent" ||
+        (v as { type?: string }).type === "draft_send_failed",
+    );
+
+    const sentInserts = activityInserts.filter(
+      (v) => (v as { type?: string }).type === "draft_sent",
+    );
+    expect(sentInserts).toHaveLength(1);
+    expect((sentInserts[0] as { draftId?: number }).draftId).toBe(42);
+
+    const failedInserts = activityInserts.filter(
+      (v) => (v as { type?: string }).type === "draft_send_failed",
+    );
+    expect(failedInserts).toHaveLength(0);
+  });
+
+  it("activity feed still shows a draft_send_failed entry when the retry also fails (no spurious delete or sent insert)", async () => {
+    mocks.sendReply.mockResolvedValue({ ok: false, error: "still rate limited" });
+
+    await request(app)
+      .post("/api/slack/actions")
+      .type("form")
+      .send(sendActionBody());
+
+    await flushAsync();
+
+    // No delete — the old failure entry stays in the feed
+    expect(mocks.dbDeleteWheres).toHaveLength(0);
+
+    // A new draft_send_failed entry was inserted for this draftId
+    const failedInserts = mocks.dbInsertValues.filter(
+      (v) => (v as { type?: string }).type === "draft_send_failed",
+    );
+    expect(failedInserts).toHaveLength(1);
+    expect((failedInserts[0] as { draftId?: number }).draftId).toBe(42);
+
+    // No draft_sent insert (send did not succeed)
+    const sentInserts = mocks.dbInsertValues.filter(
+      (v) => (v as { type?: string }).type === "draft_sent",
+    );
+    expect(sentInserts).toHaveLength(0);
+  });
+
+  // ── 6. Idempotency: already-actioned draft is ignored ─────────────────────
 
   it("ignores retry if draft is already sent (idempotency guard)", async () => {
     mocks.draftRow.status = "sent";
