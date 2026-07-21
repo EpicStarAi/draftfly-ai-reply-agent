@@ -467,4 +467,26 @@ describe("send_failed draft retry path", () => {
     expect(mocks.dbDeleteWheres).toHaveLength(0);
     expect(mocks.dbUpdateSets).toHaveLength(0);
   });
+
+  it("ignores Send button press if draft is already edited (idempotency guard blocks re-send)", async () => {
+    // An operator previously used the Edit modal: the draft was edited and the reply
+    // was sent — status is now "edited".  If they somehow press the ✅ Send button
+    // again (e.g. via a stale Slack message), the action must be a no-op:
+    //  • sendReply must NOT be called (prevents a duplicate Lemlist send)
+    //  • No DB status update must be written
+    //  • No activity row must be inserted
+    mocks.draftRow.status = "edited";
+    mocks.sendReply.mockResolvedValue({ ok: true });
+
+    await request(app)
+      .post("/api/slack/actions")
+      .type("form")
+      .send(sendActionBody());
+
+    await flushAsync();
+
+    expect(mocks.sendReply).not.toHaveBeenCalled();
+    expect(mocks.dbUpdateSets).toHaveLength(0);
+    expect(mocks.dbInsertValues).toHaveLength(0);
+  });
 });
