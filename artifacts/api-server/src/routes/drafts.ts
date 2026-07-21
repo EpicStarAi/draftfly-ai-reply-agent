@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { eq, and } from "drizzle-orm";
-import { db, draftsTable, campaignsTable, activityTable } from "@workspace/db";
+import { db, draftsTable, campaignsTable, clientsTable, personasTable, activityTable } from "@workspace/db";
+import { postApprovalCard, isSlackConfigured } from "../lib/slack";
 import {
   ListDraftsQueryParams,
   ListDraftsResponse,
@@ -104,6 +105,112 @@ router.patch("/drafts/:id/action", async (req, res): Promise<void> => {
   });
 
   res.json(ApplyDraftActionResponse.parse(draft));
+});
+
+// POST /api/drafts/:id/repost — re-post the Slack approval card for an existing draft.
+// Resets status to "pending" and posts a fresh card. Safe to call on send_failed drafts.
+// Does NOT create a new draft — no duplicate.
+router.post("/drafts/:id/repost", async (req, res): Promise<void> => {
+  const id = parseInt(req.params.id ?? "", 10);
+  if (isNaN(id)) {
+    res.status(400).json({ error: "Invalid draft id" });
+    return;
+  }
+
+  if (!isSlackConfigured()) {
+    res.status(503).json({ error: "Slack is not configured" });
+    return;
+  }
+
+  const [draft] = await db.select().from(draftsTable).where(eq(draftsTable.id, id));
+  if (!draft) {
+    res.status(404).json({ error: "Draft not found" });
+    return;
+  }
+
+  if (draft.status === "sent" || draft.status === "discarded") {
+    res.status(409).json({ error: `Draft is already ${draft.status} — cannot repost` });
+    return;
+  }
+
+  const [campaign] = await db.select().from(campaignsTable).where(eq(campaignsTable.id, draft.campaignId));
+  const [client] = await db.select().from(clientsTable).where(eq(clientsTable.id, draft.clientId));
+  const persona = campaign?.personaId
+    ? (await db.select().from(personasTable).where(eq(personasTable.id, campaign.personaId)))[0]
+    : undefined;
+
+  if (!client) {
+    res.status(404).json({ error: "Client not found for draft" });
+    return;
+  }
+
+  // Determine Slack channel — prefer real per-client Slack ID over placeholder
+  const isSlackId = (c: string | null | undefined) => !!c && /^[CG][A-Z0-9]{9,}/.test(c);
+  const rawEnvChannel = process.env.SLACK_CHANNEL_ID ?? "";
+  const envChannelMatch = rawEnvChannel.match(/\b[CG][A-Z0-9]{9,11}\b/);
+  const globalChannel = envChannelMatch ? envChannelMatch[0] : null;
+  const approvalChannel = isSlackId(client.slackChannel)
+    ? client.slackChannel
+    : (globalChannel ?? client.slackChannel ?? "");
+
+  if (!approvalChannel) {
+    res.status(503).json({ error: "No Slack channel configured for this client" });
+    return;
+  }
+
+  const isRealToken = (t: string | null | undefined) =>
+    !!t && t.startsWith("xoxb-") && !t.includes("placeholder");
+  const botToken = isRealToken(client.slackBotToken) ? (client.slackBotToken ?? undefined) : undefined;
+
+  // Reset draft to pending (idempotent — safe to call even if already pending)
+  await db.update(draftsTable)
+    .set({ status: "pending", actionedAt: null, slackMessageTs: null })
+    .where(eq(draftsTable.id, draft.id));
+
+  // Post new approval card
+  let slackTs: string | null = null;
+  try {
+    slackTs = await postApprovalCard({
+      channelId: approvalChannel,
+      botToken,
+      draftId: draft.id,
+      leadName: draft.prospectName,
+      leadCompany: draft.prospectCompany ?? "",
+      leadEmail: draft.prospectEmail,
+      incomingReply: draft.conversationSnippet ?? "",
+      generatedDraft: draft.replyText,
+      campaignName: campaign?.name ?? "",
+      personaName: persona?.name ?? "SDR",
+      region: draft.prospectCountry ?? "US",
+    });
+  } catch (err) {
+    req.log.error({ err, draftId: draft.id }, "repost: failed to post Slack approval card");
+    // Restore original status so draft isn't stuck as pending with no card
+    await db.update(draftsTable)
+      .set({ status: "send_failed", actionedAt: new Date() })
+      .where(eq(draftsTable.id, draft.id));
+    res.status(502).json({ error: `Slack post failed: ${err instanceof Error ? err.message : String(err)}` });
+    return;
+  }
+
+  if (slackTs) {
+    await db.update(draftsTable)
+      .set({ slackMessageTs: `${approvalChannel}|${slackTs}` })
+      .where(eq(draftsTable.id, draft.id));
+  }
+
+  await db.insert(activityTable).values({
+    type: "draft_created",
+    description: `Slack approval card reposted for draft #${draft.id} (${draft.prospectName} / ${draft.prospectEmail})`,
+    clientId: draft.clientId,
+    campaignId: draft.campaignId,
+    draftId: draft.id,
+    campaignName: campaign?.name ?? null,
+  });
+
+  req.log.info({ draftId: draft.id, channel: approvalChannel, slackTs }, "repost: Slack approval card posted");
+
+  res.json({ ok: true, draftId: draft.id, channel: approvalChannel, slackTs, duplicateCreated: false });
 });
 
 export default router;

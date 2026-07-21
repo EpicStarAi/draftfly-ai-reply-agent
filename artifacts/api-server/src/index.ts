@@ -2,7 +2,9 @@ import app from "./app";
 import { logger } from "./lib/logger";
 import { runMigrations } from "stripe-replit-sync";
 import { getStripeSync } from "./stripeClient";
-import { startStaleDraftSweeper } from "./lib/staleDraftSweeper";
+// staleDraftSweeper import retained for manual use only — NOT started automatically.
+// Auto-sweeping is disabled: no draft is ever changed without explicit operator action in Slack.
+// import { startStaleDraftSweeper } from "./lib/staleDraftSweeper";
 
 const rawPort = process.env["PORT"];
 
@@ -52,5 +54,5 @@ app.listen(port, (err) => {
   }
 
   logger.info({ port }, "Server listening");
-  startStaleDraftSweeper();
+  // Auto-sweep disabled: manual Slack approval is the only way to action a draft.
 });
