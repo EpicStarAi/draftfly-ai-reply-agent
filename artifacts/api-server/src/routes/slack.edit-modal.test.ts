@@ -286,6 +286,26 @@ describe("Edit modal flow — end-to-end integration", () => {
         }),
       );
     });
+
+    it("sends an ephemeral message instead of opening the modal when the draft is already edited and sent", async () => {
+      mocks.draftRow.status = "edited";
+
+      const res = await request(app)
+        .post("/api/slack/actions")
+        .type("form")
+        .send(editActionPayload());
+
+      expect(res.status).toBe(200);
+      await flushAsync();
+
+      expect(mocks.openEditModal).not.toHaveBeenCalled();
+      expect(mocks.postEphemeral).toHaveBeenCalledOnce();
+      expect(mocks.postEphemeral).toHaveBeenCalledWith(
+        expect.objectContaining({
+          text: expect.stringContaining("already been edited and sent"),
+        }),
+      );
+    });
   });
 
   // ── 2. Empty submission returns validation error ───────────────────────────
