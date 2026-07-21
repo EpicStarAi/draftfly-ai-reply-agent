@@ -72,6 +72,27 @@ router.patch("/drafts/:id/action", async (req, res): Promise<void> => {
   const { action, editedText } = body.data;
   const newStatus = action === "send" ? "sent" : action === "edit" ? "edited" : "discarded";
 
+  // Fetch the current draft so we can detect a send_failed → success retry
+  const [existingDraft] = await db
+    .select()
+    .from(draftsTable)
+    .where(eq(draftsTable.id, params.data.id));
+
+  if (!existingDraft) {
+    res.status(404).json({ error: "Draft not found" });
+    return;
+  }
+
+  const isRetryFromFailure = existingDraft.status === "send_failed";
+
+  // If retrying a previously-failed draft, remove the stale draft_send_failed activity
+  // entry before inserting the success entry so the feed shows exactly one row per draft.
+  if (isRetryFromFailure) {
+    await db
+      .delete(activityTable)
+      .where(and(eq(activityTable.draftId, params.data.id), eq(activityTable.type, "draft_send_failed")));
+  }
+
   const updateData: Record<string, unknown> = {
     status: newStatus,
     actionedAt: new Date(),
