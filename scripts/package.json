@@ -6,7 +6,8 @@
   "scripts": {
     "hello": "tsx ./src/hello.ts",
     "fix-raw-json-drafts": "tsx ./src/fix-raw-json-drafts.ts",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test:post-merge": "bash ./test-post-merge.sh"
   },
   "dependencies": {
     "@workspace/db": "workspace:*",
