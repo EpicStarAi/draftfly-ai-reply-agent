@@ -181,6 +181,265 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# Integration test: GITHUB_TOKEN missing — push skipped, script exits 0,
+# setup-step output is not lost.
+# ---------------------------------------------------------------------------
+
+echo ""
+echo "=== Integration test: missing GITHUB_TOKEN ==="
+
+TMPSCRIPT2=$(mktemp /tmp/post-merge-test.XXXXXX.sh)
+trap 'rm -f "$TMPSCRIPT2"' EXIT
+
+cat > "$TMPSCRIPT2" <<'SCRIPT'
+#!/bin/bash
+
+FAILED_STEPS=()
+
+run_step() {
+  local name="$1"
+  local timeout_secs="$2"
+  shift 2
+  timeout "$timeout_secs" "$@"
+  local exit_code=$?
+  if [ $exit_code -eq 124 ]; then
+    echo "Warning: step '${name}' timed out after ${timeout_secs}s"
+    FAILED_STEPS+=("${name} (timed out)")
+  elif [ $exit_code -ne 0 ]; then
+    FAILED_STEPS+=("${name}")
+  fi
+}
+
+# Simulate: pnpm install fails, db push succeeds
+run_step "pnpm install" 5 false
+run_step "db push" 5 true
+
+if [ ${#FAILED_STEPS[@]} -gt 0 ]; then
+  echo "Warning: the following setup steps failed: ${FAILED_STEPS[*]}"
+  echo "GitHub mirror will still be updated."
+fi
+
+push_to_github() {
+  if [ -n "$GITHUB_TOKEN" ]; then
+    local remote="https://EpicStarAi:${GITHUB_TOKEN}@github.com/EpicStarAi/draftfly-ai-reply-agent.git"
+    if git remote get-url github >/dev/null 2>&1; then
+      git remote set-url github "$remote"
+    else
+      git remote add github "$remote"
+    fi
+    git push --force github HEAD:main \
+      || echo "Warning: GitHub mirror push failed (non-fatal)"
+  fi
+}
+push_to_github
+SCRIPT
+
+chmod +x "$TMPSCRIPT2"
+
+# Run with GITHUB_TOKEN unset
+no_token_output=$(env -u GITHUB_TOKEN "$TMPSCRIPT2" 2>&1)
+no_token_exit=$?
+
+# --- Test 12: script exits 0 when GITHUB_TOKEN is missing ---
+if [ $no_token_exit -eq 0 ]; then
+  pass "script exits 0 when GITHUB_TOKEN is missing"
+else
+  fail "script should exit 0 when GITHUB_TOKEN is missing (got exit $no_token_exit)"
+fi
+
+# --- Test 13: setup-step warning is still printed when GITHUB_TOKEN is missing ---
+if echo "$no_token_output" | grep -q "the following setup steps failed"; then
+  pass "setup-step failure warning is printed even when GITHUB_TOKEN is missing"
+else
+  fail "setup-step failure warning should appear regardless of GITHUB_TOKEN (output: $no_token_output)"
+fi
+
+# --- Test 14: 'GitHub mirror will still be updated' printed when GITHUB_TOKEN is missing ---
+if echo "$no_token_output" | grep -q "GitHub mirror will still be updated"; then
+  pass "'GitHub mirror will still be updated' is printed when GITHUB_TOKEN is missing"
+else
+  fail "'GitHub mirror will still be updated' should be printed when GITHUB_TOKEN is missing (output: $no_token_output)"
+fi
+
+# ---------------------------------------------------------------------------
+# Integration test: GITHUB_TOKEN set but push fails — warning printed,
+# script still exits 0, setup-step output is not lost.
+# ---------------------------------------------------------------------------
+
+echo ""
+echo "=== Integration test: push failure (bad remote) ==="
+
+TMPDIR_GIT=$(mktemp -d /tmp/post-merge-git-stub.XXXXXX)
+trap 'rm -rf "$TMPDIR_GIT"' EXIT
+
+# Stub git: remote management succeeds; push always fails
+cat > "$TMPDIR_GIT/git" <<'STUB'
+#!/bin/bash
+# Stub git for push failure tests
+if [ "$1" = "push" ]; then
+  echo "ERROR: failed to push some refs (stub)" >&2
+  exit 1
+fi
+# remote get-url/set-url/add: succeed silently
+exit 0
+STUB
+chmod +x "$TMPDIR_GIT/git"
+
+TMPSCRIPT3=$(mktemp /tmp/post-merge-test.XXXXXX.sh)
+trap 'rm -f "$TMPSCRIPT3"' EXIT
+
+cat > "$TMPSCRIPT3" <<'SCRIPT'
+#!/bin/bash
+
+FAILED_STEPS=()
+
+run_step() {
+  local name="$1"
+  local timeout_secs="$2"
+  shift 2
+  timeout "$timeout_secs" "$@"
+  local exit_code=$?
+  if [ $exit_code -eq 124 ]; then
+    echo "Warning: step '${name}' timed out after ${timeout_secs}s"
+    FAILED_STEPS+=("${name} (timed out)")
+  elif [ $exit_code -ne 0 ]; then
+    FAILED_STEPS+=("${name}")
+  fi
+}
+
+# Simulate: both setup steps succeed
+run_step "pnpm install" 5 true
+run_step "db push" 5 true
+
+if [ ${#FAILED_STEPS[@]} -gt 0 ]; then
+  echo "Warning: the following setup steps failed: ${FAILED_STEPS[*]}"
+  echo "GitHub mirror will still be updated."
+fi
+
+push_to_github() {
+  if [ -n "$GITHUB_TOKEN" ]; then
+    local remote="https://EpicStarAi:${GITHUB_TOKEN}@github.com/EpicStarAi/draftfly-ai-reply-agent.git"
+    if git remote get-url github >/dev/null 2>&1; then
+      git remote set-url github "$remote"
+    else
+      git remote add github "$remote"
+    fi
+    git push --force github HEAD:main \
+      || echo "Warning: GitHub mirror push failed (non-fatal)"
+  fi
+}
+push_to_github
+SCRIPT
+
+chmod +x "$TMPSCRIPT3"
+
+# Run with stubbed git (push always fails) and a fake token
+push_fail_output=$(PATH="$TMPDIR_GIT:$PATH" GITHUB_TOKEN=fake-token "$TMPSCRIPT3" 2>&1)
+push_fail_exit=$?
+
+# --- Test 15: script exits 0 when push fails ---
+if [ $push_fail_exit -eq 0 ]; then
+  pass "script exits 0 when git push fails"
+else
+  fail "script should exit 0 when git push fails (got exit $push_fail_exit)"
+fi
+
+# --- Test 16: push failure warning message is printed ---
+if echo "$push_fail_output" | grep -q "Warning: GitHub mirror push failed"; then
+  pass "push failure warning message is printed when git push fails"
+else
+  fail "push failure warning should be printed when git push fails (output: $push_fail_output)"
+fi
+
+# --- Test 17: setup-step output not lost when push fails (no failed steps) ---
+# When all steps succeed, the failed-steps summary should NOT appear
+if ! echo "$push_fail_output" | grep -q "the following setup steps failed"; then
+  pass "setup-step output correctly absent when all steps pass (push failure only)"
+else
+  fail "spurious setup-step failure warning should not appear when steps passed (output: $push_fail_output)"
+fi
+
+# ---------------------------------------------------------------------------
+# Integration test: both setup failures and push failure co-exist — all
+# warnings appear, script exits 0.
+# ---------------------------------------------------------------------------
+
+echo ""
+echo "=== Integration test: setup failures + push failure ==="
+
+TMPSCRIPT4=$(mktemp /tmp/post-merge-test.XXXXXX.sh)
+trap 'rm -f "$TMPSCRIPT4"' EXIT
+
+cat > "$TMPSCRIPT4" <<'SCRIPT'
+#!/bin/bash
+
+FAILED_STEPS=()
+
+run_step() {
+  local name="$1"
+  local timeout_secs="$2"
+  shift 2
+  timeout "$timeout_secs" "$@"
+  local exit_code=$?
+  if [ $exit_code -eq 124 ]; then
+    echo "Warning: step '${name}' timed out after ${timeout_secs}s"
+    FAILED_STEPS+=("${name} (timed out)")
+  elif [ $exit_code -ne 0 ]; then
+    FAILED_STEPS+=("${name}")
+  fi
+}
+
+# Simulate: pnpm install fails, db push times out
+run_step "pnpm install" 5 false
+run_step "db push" 1 sleep 60
+
+if [ ${#FAILED_STEPS[@]} -gt 0 ]; then
+  echo "Warning: the following setup steps failed: ${FAILED_STEPS[*]}"
+  echo "GitHub mirror will still be updated."
+fi
+
+push_to_github() {
+  if [ -n "$GITHUB_TOKEN" ]; then
+    local remote="https://EpicStarAi:${GITHUB_TOKEN}@github.com/EpicStarAi/draftfly-ai-reply-agent.git"
+    if git remote get-url github >/dev/null 2>&1; then
+      git remote set-url github "$remote"
+    else
+      git remote add github "$remote"
+    fi
+    git push --force github HEAD:main \
+      || echo "Warning: GitHub mirror push failed (non-fatal)"
+  fi
+}
+push_to_github
+SCRIPT
+
+chmod +x "$TMPSCRIPT4"
+
+combined_output=$(PATH="$TMPDIR_GIT:$PATH" GITHUB_TOKEN=fake-token "$TMPSCRIPT4" 2>&1)
+combined_exit=$?
+
+# --- Test 18: script exits 0 with both setup failures and push failure ---
+if [ $combined_exit -eq 0 ]; then
+  pass "script exits 0 when setup steps fail AND push fails"
+else
+  fail "script should exit 0 with combined failures (got exit $combined_exit)"
+fi
+
+# --- Test 19: setup-step summary still printed when push also fails ---
+if echo "$combined_output" | grep -q "the following setup steps failed"; then
+  pass "setup-step failure summary printed even when push also fails"
+else
+  fail "setup-step failure summary should appear when steps failed (output: $combined_output)"
+fi
+
+# --- Test 20: push failure warning printed alongside setup failures ---
+if echo "$combined_output" | grep -q "Warning: GitHub mirror push failed"; then
+  pass "push failure warning printed alongside setup-step failures"
+else
+  fail "push failure warning should appear alongside setup-step failures (output: $combined_output)"
+fi
+
+# ---------------------------------------------------------------------------
 # Summary
 # ---------------------------------------------------------------------------
 echo ""
