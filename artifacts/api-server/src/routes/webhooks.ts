@@ -97,24 +97,34 @@ router.post("/webhooks/lemlist/simulate", async (req, res): Promise<void> => {
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
 /**
- * Claude occasionally wraps its reply in a JSON object like `{"draft":"Hi..."}`.
- * Strip the wrapper and return just the plain text.
+ * Claude occasionally wraps its reply in a JSON object or markdown code block.
+ * This function strips all wrappers and returns just the plain draft text.
+ * Handles: plain JSON `{"draft":"..."}`, markdown ```json {...} ```, and raw text.
  */
 function extractDraftText(raw: string): string {
   const trimmed = raw.trim();
-  if (trimmed.startsWith("{")) {
+
+  // Strip markdown code block: ```json {...} ``` or ``` {...} ```
+  const codeBlockMatch = trimmed.match(/^```(?:json)?\s*([\s\S]*?)```$/);
+  const innerText = codeBlockMatch ? codeBlockMatch[1].trim() : trimmed;
+
+  // Try to parse as JSON and extract the draft field
+  if (innerText.startsWith("{")) {
     try {
-      const parsed = JSON.parse(trimmed) as Record<string, unknown>;
-      // Accept any top-level string field (draft, reply, text, message, content)
+      const parsed = JSON.parse(innerText) as Record<string, unknown>;
       for (const key of ["draft", "reply", "text", "message", "content"]) {
         if (typeof parsed[key] === "string") {
           return (parsed[key] as string).trim();
         }
       }
     } catch {
-      // Not valid JSON — fall through and return as-is
+      // Not valid JSON — fall through
     }
   }
+
+  // If we stripped a code block but couldn't parse JSON, return the inner text
+  if (codeBlockMatch) return innerText;
+
   return raw;
 }
 

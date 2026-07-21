@@ -77,22 +77,26 @@ export async function generateDraftReply(params: DraftParams): Promise<DraftResu
 
   const raw = response.content.find((b) => b.type === "text")?.text ?? "";
 
+  // Strip markdown code block wrapper if Claude returned ```json {...} ```
+  const codeBlockMatch = raw.trim().match(/^```(?:json)?\s*([\s\S]*?)```$/);
+  const jsonCandidate = codeBlockMatch ? codeBlockMatch[1].trim() : raw.trim();
+
   try {
-    const parsed = JSON.parse(raw) as {
+    const parsed = JSON.parse(jsonCandidate) as {
       draft?: string;
       confidence_score?: number;
       detected_intent?: string;
       suggested_next_action?: string;
     };
     return {
-      draft: parsed.draft ?? raw,
+      draft: parsed.draft ?? jsonCandidate,
       confidenceScore: parsed.confidence_score ?? 0.8,
       detectedIntent: parsed.detected_intent ?? "interest",
       suggestedNextAction: parsed.suggested_next_action ?? "schedule_call",
     };
   } catch {
     return {
-      draft: raw,
+      draft: jsonCandidate,
       confidenceScore: 0.75,
       detectedIntent: "interest",
       suggestedNextAction: "schedule_call",
