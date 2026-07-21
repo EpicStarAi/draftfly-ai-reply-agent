@@ -5,6 +5,7 @@ import {
   verifyIncomingRequest,
   postTestMessage,
   updateMessageAfterAction,
+  postFallbackFailureNotification,
   postApprovalCard,
   openEditModal,
   postEphemeral,
@@ -65,7 +66,19 @@ async function processSlackAction(params: {
           userId,
           botToken,
           "Campaign not found",
-        );
+        ).catch((err) => {
+          logger.warn({ err }, "updateMessageAfterAction failed after campaign-not-found — sending fallback DM");
+          void postFallbackFailureNotification({
+            userId,
+            channelId: channel,
+            botToken,
+            draftId,
+            lemlistError: "Campaign not found",
+            cardUpdateError: err instanceof Error ? err.message : String(err),
+            prospectName: draft.prospectName,
+            prospectEmail: draft.prospectEmail,
+          }).catch((e) => logger.warn({ e }, "postFallbackFailureNotification also failed"));
+        });
       }
       return;
     }
@@ -124,7 +137,19 @@ async function processSlackAction(params: {
           userId,
           botToken,
           lemlistError,
-        );
+        ).catch((err) => {
+          logger.warn({ err }, "updateMessageAfterAction failed after Lemlist failure — sending fallback DM");
+          void postFallbackFailureNotification({
+            userId,
+            channelId: channel,
+            botToken,
+            draftId,
+            lemlistError,
+            cardUpdateError: err instanceof Error ? err.message : String(err),
+            prospectName: draft.prospectName,
+            prospectEmail: draft.prospectEmail,
+          }).catch((e) => logger.warn({ e }, "postFallbackFailureNotification also failed"));
+        });
       }
       return;
     }
@@ -217,7 +242,20 @@ async function processEditSubmission(params: {
     logger.error({ draftId }, "Campaign not found — cannot send edited reply via Lemlist");
     if (draft.slackMessageTs) {
       const [channel, ts] = draft.slackMessageTs.split("|");
-      void updateMessageAfterAction(channel, ts ?? channel, "send_failed", userId, botToken, "Campaign not found");
+      void updateMessageAfterAction(channel, ts ?? channel, "send_failed", userId, botToken, "Campaign not found")
+        .catch((err) => {
+          logger.warn({ err }, "updateMessageAfterAction failed after campaign-not-found (edit) — sending fallback DM");
+          void postFallbackFailureNotification({
+            userId,
+            channelId: channel,
+            botToken,
+            draftId,
+            lemlistError: "Campaign not found",
+            cardUpdateError: err instanceof Error ? err.message : String(err),
+            prospectName: draft.prospectName,
+            prospectEmail: draft.prospectEmail,
+          }).catch((e) => logger.warn({ e }, "postFallbackFailureNotification also failed"));
+        });
     }
     return;
   }
@@ -266,7 +304,20 @@ async function processEditSubmission(params: {
 
     if (draft.slackMessageTs) {
       const [channel, ts] = draft.slackMessageTs.split("|");
-      void updateMessageAfterAction(channel, ts ?? channel, "send_failed", userId, botToken, lemlistError);
+      void updateMessageAfterAction(channel, ts ?? channel, "send_failed", userId, botToken, lemlistError)
+        .catch((err) => {
+          logger.warn({ err }, "updateMessageAfterAction failed after Lemlist failure (edit) — sending fallback DM");
+          void postFallbackFailureNotification({
+            userId,
+            channelId: channel,
+            botToken,
+            draftId,
+            lemlistError,
+            cardUpdateError: err instanceof Error ? err.message : String(err),
+            prospectName: draft.prospectName,
+            prospectEmail: draft.prospectEmail,
+          }).catch((e) => logger.warn({ e }, "postFallbackFailureNotification also failed"));
+        });
     }
     return;
   }

@@ -16,29 +16,35 @@ import { vi, describe, it, expect, beforeEach, afterAll } from "vitest";
 // vi.mock factories are hoisted above all imports/declarations, so any variables
 // they reference must also be hoisted via vi.hoisted().
 
-const { mockSendReply, mockVerifyIncomingRequest, mockUpdateMessageAfterAction, mockDraftRow } =
-  vi.hoisted(() => {
-    const draftRow = {
-      id: 1,
-      status: "pending",
-      clientId: 1,
-      campaignId: 1,
-      prospectEmail: "lead@example.com",
-      prospectName: "Test Lead",
-      prospectCompany: "Acme Corp",
-      prospectCountry: "US",
-      replyText: "Hi there, thanks for reaching out!",
-      editedReplyText: null,
-      slackMessageTs: null as string | null,
-      actionedAt: null,
-    };
-    return {
-      mockSendReply: vi.fn<() => Promise<{ ok: boolean; error?: string }>>(),
-      mockVerifyIncomingRequest: vi.fn(() => true),
-      mockUpdateMessageAfterAction: vi.fn(() => Promise.resolve()),
-      mockDraftRow: draftRow,
-    };
-  });
+const {
+  mockSendReply,
+  mockVerifyIncomingRequest,
+  mockUpdateMessageAfterAction,
+  mockPostFallbackFailureNotification,
+  mockDraftRow,
+} = vi.hoisted(() => {
+  const draftRow = {
+    id: 1,
+    status: "pending",
+    clientId: 1,
+    campaignId: 1,
+    prospectEmail: "lead@example.com",
+    prospectName: "Test Lead",
+    prospectCompany: "Acme Corp",
+    prospectCountry: "US",
+    replyText: "Hi there, thanks for reaching out!",
+    editedReplyText: null,
+    slackMessageTs: null as string | null,
+    actionedAt: null,
+  };
+  return {
+    mockSendReply: vi.fn<() => Promise<{ ok: boolean; error?: string }>>(),
+    mockVerifyIncomingRequest: vi.fn(() => true),
+    mockUpdateMessageAfterAction: vi.fn(() => Promise.resolve()),
+    mockPostFallbackFailureNotification: vi.fn(() => Promise.resolve()),
+    mockDraftRow: draftRow,
+  };
+});
 
 // ─── Module mocks (hoisted above all imports by vitest) ───────────────────────
 
@@ -60,6 +66,7 @@ vi.mock("../lib/lemlist", async (importOriginal) => {
 vi.mock("../lib/slack", () => ({
   verifyIncomingRequest: mockVerifyIncomingRequest,
   updateMessageAfterAction: mockUpdateMessageAfterAction,
+  postFallbackFailureNotification: mockPostFallbackFailureNotification,
   openEditModal: vi.fn(() => Promise.resolve()),
   isSlackConfigured: vi.fn(() => false),
   postApprovalCard: vi.fn(() => Promise.resolve("ts123")),
@@ -537,5 +544,76 @@ describe("POST /api/slack/actions — send_failed Slack card update", () => {
       },
       { timeout: 2_000 },
     );
+  });
+
+  // ── Fallback DM when Slack card update fails ───────────────────────────────
+
+  it("sends fallback DM when updateMessageAfterAction rejects after Lemlist failure (draft_send)", async () => {
+    mockSendReply.mockResolvedValue({ ok: false, error: "rate_limited" });
+    mockUpdateMessageAfterAction.mockRejectedValue(new Error("token_revoked"));
+
+    await request(app)
+      .post("/api/slack/actions")
+      .type("form")
+      .send(blockActionBody("draft_send"));
+
+    await vi.waitFor(
+      () => {
+        expect(mockPostFallbackFailureNotification).toHaveBeenCalledWith(
+          expect.objectContaining({
+            userId: "U_OPERATOR",
+            channelId: "C_CHANNEL",
+            draftId: 1,
+            lemlistError: "rate_limited",
+            cardUpdateError: "token_revoked",
+          }),
+        );
+      },
+      { timeout: 2_000 },
+    );
+  });
+
+  it("sends fallback DM when updateMessageAfterAction rejects after Lemlist failure (edit modal)", async () => {
+    mockSendReply.mockResolvedValue({ ok: false, error: "lead_not_found" });
+    mockUpdateMessageAfterAction.mockRejectedValue(new Error("channel_not_found"));
+
+    await request(app)
+      .post("/api/slack/actions")
+      .type("form")
+      .send(viewSubmissionBody());
+
+    await vi.waitFor(
+      () => {
+        expect(mockPostFallbackFailureNotification).toHaveBeenCalledWith(
+          expect.objectContaining({
+            userId: "U_OPERATOR",
+            channelId: "C_CHANNEL",
+            draftId: 1,
+            lemlistError: "lead_not_found",
+            cardUpdateError: "channel_not_found",
+          }),
+        );
+      },
+      { timeout: 2_000 },
+    );
+  });
+
+  it("does NOT call postFallbackFailureNotification when updateMessageAfterAction succeeds (draft_send)", async () => {
+    mockSendReply.mockResolvedValue({ ok: false, error: "rate_limited" });
+    mockUpdateMessageAfterAction.mockResolvedValue(undefined);
+
+    await request(app)
+      .post("/api/slack/actions")
+      .type("form")
+      .send(blockActionBody("draft_send"));
+
+    await vi.waitFor(
+      () => {
+        expect(mockUpdateMessageAfterAction).toHaveBeenCalled();
+      },
+      { timeout: 2_000 },
+    );
+
+    expect(mockPostFallbackFailureNotification).not.toHaveBeenCalled();
   });
 });

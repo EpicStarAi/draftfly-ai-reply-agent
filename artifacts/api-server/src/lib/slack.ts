@@ -318,6 +318,66 @@ export async function postEscalationAlert(params: {
   }
 }
 
+export async function postFallbackFailureNotification(params: {
+  userId: string;
+  channelId?: string;
+  botToken?: string;
+  draftId: number;
+  lemlistError?: string;
+  cardUpdateError?: string;
+  prospectName?: string;
+  prospectEmail?: string;
+}): Promise<void> {
+  if (!isSlackConfigured() && !params.botToken) {
+    logger.warn(
+      { draftId: params.draftId },
+      "postFallbackFailureNotification: Slack not configured, cannot send fallback DM",
+    );
+    return;
+  }
+
+  const leadInfo = params.prospectName
+    ? `${params.prospectName}${params.prospectEmail ? ` (${params.prospectEmail})` : ""}`
+    : (params.prospectEmail ?? "unknown lead");
+
+  const lines: string[] = [
+    `⚠️ *Send failed for draft #${params.draftId}*`,
+    `*Lead:* ${leadInfo}`,
+  ];
+  if (params.lemlistError) lines.push(`*Lemlist error:* ${params.lemlistError}`);
+  lines.push(
+    `The Slack card could not be updated automatically${params.cardUpdateError ? `: ${params.cardUpdateError}` : "."}`,
+    "Please check DraftFly to retry or review the draft.",
+  );
+  const bodyText = lines.join("\n");
+
+  const client = getClient(params.botToken);
+
+  // Try DM first (in Slack, posting to a user ID opens a DM).
+  // If that fails, fall back to the original channel so the alert always lands somewhere.
+  const targets = [params.userId, params.channelId].filter(Boolean) as string[];
+  for (const target of targets) {
+    try {
+      await client.chat.postMessage({
+        channel: target,
+        text: `⚠️ Send failed for draft #${params.draftId} — Slack card update also failed. Check DraftFly to retry.`,
+        blocks: [
+          {
+            type: "section",
+            text: { type: "mrkdwn", text: bodyText },
+          },
+        ],
+      });
+      return;
+    } catch (err) {
+      logger.warn(
+        { err, target, draftId: params.draftId },
+        "postFallbackFailureNotification: failed to post to target",
+      );
+    }
+  }
+}
+
 export async function updateMessageAfterAction(
   channelId: string,
   ts: string,
@@ -360,15 +420,11 @@ export async function updateMessageAfterAction(
     });
   }
 
-  try {
-    const client = getClient(botToken);
-    await client.chat.update({
-      channel: channelId,
-      ts,
-      text,
-      blocks,
-    });
-  } catch (err) {
-    logger.warn({ err }, "Failed to update Slack message after action");
-  }
+  const client = getClient(botToken);
+  await client.chat.update({
+    channel: channelId,
+    ts,
+    text,
+    blocks,
+  });
 }
