@@ -125,6 +125,49 @@ router.get("/auth/me", (req, res) => {
   res.json(req.session.user);
 });
 
+function devLoginEnabled(): boolean {
+  return (
+    process.env["NODE_ENV"] !== "production" &&
+    process.env["ENABLE_DEV_LOGIN"] === "true"
+  );
+}
+
+function safeRedirect(next: unknown): string {
+  if (typeof next !== "string") return "/app";
+  const trimmed = next.trim();
+  if (!trimmed.startsWith("/") || trimmed.startsWith("//")) return "/app";
+  return trimmed;
+}
+
+router.post("/auth/dev-login", (req, res) => {
+  if (!devLoginEnabled()) {
+    res.status(404).json({ error: "Not found" });
+    return;
+  }
+  req.session.user = {
+    id: "TEST_USER",
+    name: "Test Operator",
+    email: "test@draftfly.dev",
+    teamId: "TEST_TEAM",
+  };
+  res.json({ ok: true });
+});
+
+router.get("/auth/dev-login", (req, res) => {
+  if (!devLoginEnabled()) {
+    res.status(404).json({ error: "Not found" });
+    return;
+  }
+  req.session.user = {
+    id: "TEST_USER",
+    name: "Test Operator",
+    email: "test@draftfly.dev",
+    teamId: "TEST_TEAM",
+  };
+  const redirect = safeRedirect(req.query["next"]);
+  req.session.save(() => res.redirect(redirect));
+});
+
 router.post("/auth/logout", (req, res) => {
   req.session.destroy((err) => {
     if (err) logger.warn({ err }, "Session destroy error");

@@ -27,3 +27,6 @@ channel = "stable-25_05"
 
 [userenv.shared]
 APP_BASE_URL = "https://sales-reply-ai.replit.app"
+
+[userenv.development]
+ENABLE_DEV_LOGIN = "true"

@@ -8,12 +8,12 @@ import { DraftStatusBadge } from "@/components/status-badges";
 import { Download, Link2, Check } from "lucide-react";
 import { buildCSV } from "@/lib/csv-utils";
 
-function getInitialFilters(search: string) {
+export function getInitialFilters(search: string) {
   const params = new URLSearchParams(search);
   return {
-    status: params.get("status") ?? "all",
-    client: params.get("clientId") ?? "all",
-    campaign: params.get("campaignId") ?? "all",
+    status: params.get("status") || "all",
+    client: params.get("clientId") || "all",
+    campaign: params.get("campaignId") || "all",
   };
 }
 
