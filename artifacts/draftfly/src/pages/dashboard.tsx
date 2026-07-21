@@ -9,7 +9,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Link } from "wouter";
+import { Link, useLocation, useSearch } from "wouter";
 import {
   Users,
   Activity,
@@ -97,8 +97,32 @@ export default function Dashboard() {
   const { status: integrations, loading: intLoading } = useIntegrationStatus();
   const { data: clients } = useListClients();
 
-  const [trendClientId, setTrendClientId] = useState<number | undefined>(undefined);
-  const [trendCampaignId, setTrendCampaignId] = useState<number | undefined>(undefined);
+  const search = useSearch();
+  const [location, navigate] = useLocation();
+
+  const _searchParams = new URLSearchParams(search);
+  const trendClientId = _searchParams.has("trendClientId")
+    ? Number(_searchParams.get("trendClientId"))
+    : undefined;
+  const trendCampaignId = _searchParams.has("trendCampaignId")
+    ? Number(_searchParams.get("trendCampaignId"))
+    : undefined;
+
+  function setTrendFilters(clientId: number | undefined, campaignId: number | undefined) {
+    const params = new URLSearchParams(search);
+    if (clientId !== undefined) {
+      params.set("trendClientId", String(clientId));
+    } else {
+      params.delete("trendClientId");
+    }
+    if (campaignId !== undefined) {
+      params.set("trendCampaignId", String(campaignId));
+    } else {
+      params.delete("trendCampaignId");
+    }
+    const qs = params.toString();
+    navigate(`${location}${qs ? "?" + qs : ""}`);
+  }
 
   const { data: allCampaigns } = useListCampaigns();
   const filteredCampaigns = trendClientId !== undefined
@@ -247,12 +271,7 @@ export default function Dashboard() {
               <Select
                 value={trendClientId !== undefined ? String(trendClientId) : "all"}
                 onValueChange={(v) => {
-                  if (v === "all") {
-                    setTrendClientId(undefined);
-                  } else {
-                    setTrendClientId(Number(v));
-                  }
-                  setTrendCampaignId(undefined);
+                  setTrendFilters(v === "all" ? undefined : Number(v), undefined);
                 }}
               >
                 <SelectTrigger className="h-7 text-xs w-36">
@@ -268,7 +287,7 @@ export default function Dashboard() {
               <Select
                 value={trendCampaignId !== undefined ? String(trendCampaignId) : "all"}
                 onValueChange={(v) => {
-                  setTrendCampaignId(v === "all" ? undefined : Number(v));
+                  setTrendFilters(trendClientId, v === "all" ? undefined : Number(v));
                 }}
                 disabled={filteredCampaigns.length === 0}
               >
