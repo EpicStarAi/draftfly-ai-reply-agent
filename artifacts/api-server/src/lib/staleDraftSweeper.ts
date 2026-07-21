@@ -1,0 +1,186 @@
+import { WebClient } from "@slack/web-api";
+import { and, eq, lt } from "drizzle-orm";
+import { db, draftsTable, activityTable, clientsTable, campaignsTable } from "@workspace/db";
+import { logger } from "./logger";
+import { isSlackConfigured, updateMessageAfterAction } from "./slack";
+
+// ─── Configuration ──────────────────────────────────────────────────────────
+
+const DEFAULT_THRESHOLD_MINUTES = 15;
+
+function getThresholdMinutes(): number {
+  const raw = process.env.STALE_DRAFT_THRESHOLD_MINUTES;
+  if (!raw) return DEFAULT_THRESHOLD_MINUTES;
+  const parsed = parseInt(raw, 10);
+  if (Number.isNaN(parsed) || parsed <= 0) {
+    logger.warn({ raw }, "staleDraftSweeper: invalid STALE_DRAFT_THRESHOLD_MINUTES — using default 15");
+    return DEFAULT_THRESHOLD_MINUTES;
+  }
+  return parsed;
+}
+
+// ─── Core sweep ─────────────────────────────────────────────────────────────
+
+export async function sweepStaleDrafts(): Promise<void> {
+  const thresholdMinutes = getThresholdMinutes();
+  const cutoff = new Date(Date.now() - thresholdMinutes * 60 * 1000);
+
+  const staleDrafts = await db
+    .select({
+      id: draftsTable.id,
+      clientId: draftsTable.clientId,
+      campaignId: draftsTable.campaignId,
+      prospectEmail: draftsTable.prospectEmail,
+      prospectName: draftsTable.prospectName,
+      slackMessageTs: draftsTable.slackMessageTs,
+      createdAt: draftsTable.createdAt,
+    })
+    .from(draftsTable)
+    .where(
+      and(
+        eq(draftsTable.status, "pending"),
+        lt(draftsTable.createdAt, cutoff),
+      ),
+    );
+
+  if (staleDrafts.length === 0) {
+    logger.debug({ thresholdMinutes }, "staleDraftSweeper: no stale drafts found");
+    return;
+  }
+
+  logger.warn({ count: staleDrafts.length, thresholdMinutes }, "staleDraftSweeper: found stale pending drafts");
+
+  for (const draft of staleDrafts) {
+    try {
+      // Fetch client and campaign for display names and per-client bot token
+      const [client] = await db
+        .select()
+        .from(clientsTable)
+        .where(eq(clientsTable.id, draft.clientId));
+      const [campaign] = await db
+        .select()
+        .from(campaignsTable)
+        .where(eq(campaignsTable.id, draft.campaignId));
+
+      const ageMinutes = Math.round((Date.now() - draft.createdAt.getTime()) / 60_000);
+
+      // Move to send_failed — use a conditional update so a concurrent action
+      // that raced us to a terminal state is not overwritten.
+      const updated = await db
+        .update(draftsTable)
+        .set({ status: "send_failed", actionedAt: new Date() })
+        .where(and(eq(draftsTable.id, draft.id), eq(draftsTable.status, "pending")))
+        .returning({ id: draftsTable.id });
+
+      if (updated.length === 0) {
+        // Another process already moved the draft — skip notifications.
+        logger.info({ draftId: draft.id }, "staleDraftSweeper: draft already actioned by another process, skipping");
+        continue;
+      }
+
+      logger.warn(
+        { draftId: draft.id, ageMinutes },
+        "staleDraftSweeper: moved stale draft to send_failed",
+      );
+
+      // Write an activity feed entry
+      await db.insert(activityTable).values({
+        type: "draft_send_failed",
+        description: `Draft #${draft.id} was pending for ${ageMinutes} minutes (threshold: ${thresholdMinutes} min) and was automatically moved to send_failed.`,
+        clientId: draft.clientId,
+        campaignId: draft.campaignId,
+        clientName: client?.name ?? undefined,
+        campaignName: campaign?.name ?? undefined,
+        draftId: draft.id,
+      });
+
+      // Update the Slack approval card so operators see it timed out
+      if (draft.slackMessageTs) {
+        const [channelId, ts] = draft.slackMessageTs.split("|");
+        const botToken = client?.slackBotToken ?? undefined;
+
+        if (channelId && ts) {
+          try {
+            await updateMessageAfterAction(
+              channelId,
+              ts,
+              "send_failed",
+              "auto-sweep",
+              botToken,
+              `Draft was pending for ${ageMinutes} minutes (threshold: ${thresholdMinutes} min)`,
+            );
+          } catch (err) {
+            logger.warn({ err, draftId: draft.id }, "staleDraftSweeper: failed to update Slack approval card");
+          }
+        }
+      }
+
+      // Post a summary alert to the optional admin channel
+      const alertChannel = process.env.SLACK_ALERT_CHANNEL;
+      if (alertChannel && isSlackConfigured()) {
+        const slackClient = new WebClient(process.env.SLACK_BOT_TOKEN);
+        try {
+          await slackClient.chat.postMessage({
+            channel: alertChannel,
+            text: `⚠️ Stale draft auto-failed: #${draft.id} (${draft.prospectName} / ${draft.prospectEmail})`,
+            blocks: [
+              {
+                type: "section",
+                text: {
+                  type: "mrkdwn",
+                  text: [
+                    `⚠️ *Stale draft automatically moved to \`send_failed\`*`,
+                    `*Draft:* #${draft.id}`,
+                    `*Lead:* ${draft.prospectName} (${draft.prospectEmail})`,
+                    `*Client:* ${client?.name ?? String(draft.clientId)}`,
+                    `*Campaign:* ${campaign?.name ?? String(draft.campaignId)}`,
+                    `*Age:* ${ageMinutes} minutes (threshold: ${thresholdMinutes} min)`,
+                    ``,
+                    `Please review and retry in DraftFly.`,
+                  ].join("\n"),
+                },
+              },
+            ],
+          });
+        } catch (err) {
+          logger.warn({ err, draftId: draft.id }, "staleDraftSweeper: failed to post alert to SLACK_ALERT_CHANNEL");
+        }
+      }
+    } catch (err) {
+      logger.error({ err, draftId: draft.id }, "staleDraftSweeper: error processing stale draft");
+    }
+  }
+}
+
+// ─── Scheduler ──────────────────────────────────────────────────────────────
+
+/**
+ * Starts a recurring sweep that checks for stale pending drafts.
+ *
+ * The sweep interval is set to min(threshold, 5) minutes so the check always
+ * runs at least once per threshold window, but never more often than every
+ * 5 minutes regardless of how small the threshold is set.
+ *
+ * Environment variables:
+ *   STALE_DRAFT_THRESHOLD_MINUTES  — how old a pending draft must be before it
+ *                                    is moved to send_failed (default: 15)
+ *   SLACK_ALERT_CHANNEL            — optional Slack channel ID to receive a
+ *                                    summary alert for each auto-failed draft
+ */
+export function startStaleDraftSweeper(): NodeJS.Timeout {
+  const thresholdMinutes = getThresholdMinutes();
+  const intervalMs = Math.min(thresholdMinutes, 5) * 60_000;
+
+  logger.info({ thresholdMinutes, intervalMs }, "staleDraftSweeper: starting");
+
+  // Run one pass immediately on startup to catch any pre-existing stale drafts
+  void sweepStaleDrafts().catch((err) => {
+    logger.error({ err }, "staleDraftSweeper: initial sweep failed");
+  });
+
+  return setInterval(() => {
+    void sweepStaleDrafts().catch((err) => {
+      logger.error({ err }, "staleDraftSweeper: sweep failed");
+    });
+  }, intervalMs);
+}
