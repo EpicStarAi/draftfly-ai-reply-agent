@@ -8,6 +8,7 @@ import {
   postApprovalCard,
   openEditModal,
   postEphemeral,
+  postEscalationAlert,
   isSlackConfigured,
 } from "../lib/slack";
 import { sendReply } from "../lib/lemlist";
@@ -452,6 +453,69 @@ router.post("/slack/actions", async (req, res): Promise<void> => {
       currentText: draft.editedReplyText ?? draft.replyText,
       botToken,
     }).catch((err) => req.log.error({ err, draftId }, "openEditModal failed"));
+    return;
+  }
+
+  // 🚨 Escalate — mark as escalated and send an alert without sending the reply
+  if (action.action_id === "draft_escalate") {
+    res.status(200).json({});
+
+    void (async () => {
+      const [draft] = await db.select().from(draftsTable).where(eq(draftsTable.id, draftId));
+      if (!draft) return;
+
+      if (draft.status !== "pending") {
+        req.log.info({ draftId, status: draft.status }, "draft_escalate: draft already actioned");
+        return;
+      }
+
+      await db.update(draftsTable)
+        .set({ status: "escalated", actionedAt: new Date() })
+        .where(eq(draftsTable.id, draftId));
+
+      const [campaign] = await db.select().from(campaignsTable).where(eq(campaignsTable.id, draft.campaignId));
+      const [client] = await db.select().from(clientsTable).where(eq(clientsTable.id, draft.clientId));
+
+      await db.insert(activityTable).values({
+        type: "draft_escalated",
+        description: `Draft escalated for ${draft.prospectName} (${draft.prospectEmail}) — ${campaign?.name ?? "unknown campaign"}`,
+        clientId: draft.clientId,
+        campaignId: draft.campaignId,
+        draftId: draft.id,
+        campaignName: campaign?.name,
+      });
+
+      await db.insert(logsTable).values({
+        clientId: draft.clientId,
+        campaignId: draft.campaignId,
+        draftId: draft.id,
+        leadId: draft.prospectEmail,
+        level: "warning",
+        message: `Draft #${draftId} escalated by ${userId} — manual review required`,
+        source: "slack",
+        metadata: JSON.stringify({ userId, teamId }),
+      });
+
+      const [channelId, slackTs] = (draft.slackMessageTs ?? "").split("|");
+      const botToken = client?.slackBotToken ?? undefined;
+
+      if (channelId && slackTs) {
+        void updateMessageAfterAction(channelId, slackTs, "escalated", userId, botToken)
+          .catch((err) => req.log.warn({ err, draftId }, "updateMessageAfterAction failed after escalate"));
+      }
+
+      if (channelId) {
+        void postEscalationAlert({
+          channelId,
+          botToken,
+          draftId: draft.id,
+          leadName: draft.prospectName,
+          leadEmail: draft.prospectEmail,
+          campaignName: campaign?.name ?? "unknown campaign",
+          operatorName: userId,
+        }).catch((err) => req.log.warn({ err, draftId }, "postEscalationAlert failed"));
+      }
+    })().catch((err) => req.log.error({ err, draftId }, "draft_escalate processing failed"));
     return;
   }
 

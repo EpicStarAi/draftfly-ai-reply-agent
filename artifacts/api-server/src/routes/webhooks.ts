@@ -118,6 +118,36 @@ function extractDraftText(raw: string): string {
   return raw;
 }
 
+// ─── Auto-reply / bounce detection ─────────────────────────────────────────
+
+const AUTO_REPLY_PATTERNS = [
+  /out of office/i,
+  /out-of-office/i,
+  /on vacation/i,
+  /on leave/i,
+  /automatic reply/i,
+  /auto-reply/i,
+  /autoreply/i,
+  /automated response/i,
+  /vacation response/i,
+  /away from (the )?office/i,
+  /currently unavailable/i,
+  /MAILER-DAEMON/i,
+  /delivery (status notification|failed|failure)/i,
+  /undeliverable/i,
+  /mail delivery (failed|subsystem)/i,
+  /postmaster@/i,
+  /do not reply/i,
+  /noreply@/i,
+  /no-reply@/i,
+];
+
+function isAutoReply(text: string, fromEmail?: string): boolean {
+  if (AUTO_REPLY_PATTERNS.some((p) => p.test(text))) return true;
+  if (fromEmail && AUTO_REPLY_PATTERNS.some((p) => p.test(fromEmail))) return true;
+  return false;
+}
+
 // ─── Core processing logic ──────────────────────────────────────────────────
 
 async function processLemlistReply(payload: LemlistWebhookPayload): Promise<{
@@ -167,7 +197,29 @@ async function processLemlistReply(payload: LemlistWebhookPayload): Promise<{
   const leadEmail = payload.leadEmail ?? "";
   const replyText = payload.replyText ?? payload.text ?? "";
 
-  // 4. Generate Claude draft
+  // 4. Detect auto-replies, bounces, OOO — skip draft generation for system messages
+  if (isAutoReply(replyText, leadEmail)) {
+    logger.info({ leadEmail, campaignId: payload.campaignId }, "Auto-reply/bounce detected — skipping draft generation");
+    await db.insert(logsTable).values({
+      clientId: client.id,
+      campaignId: campaign.id,
+      leadId: payload.leadId ?? leadEmail,
+      level: "info",
+      message: `Auto-reply or bounce detected from ${leadEmail} — no draft created`,
+      source: "system",
+      metadata: JSON.stringify({ replyText: replyText.slice(0, 200) }),
+    });
+    await db.insert(activityTable).values({
+      type: "draft_skipped",
+      description: `Auto-reply / bounce from ${leadEmail} — draft skipped (${campaign.name})`,
+      clientId: client.id,
+      campaignId: campaign.id,
+      campaignName: campaign.name,
+    });
+    return {};
+  }
+
+  // 5. Generate Claude draft
   const draftResult = await generateDraftReply({
     leadName,
     leadEmail,

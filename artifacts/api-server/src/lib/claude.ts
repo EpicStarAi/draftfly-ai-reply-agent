@@ -137,8 +137,8 @@ You must respond with a JSON object in this exact format:
 {
   "draft": "<the reply email/message body>",
   "confidence_score": <0.0-1.0>,
-  "detected_intent": "<interest|objection|pricing|timing|referral|not_interested|unclear>",
-  "suggested_next_action": "<schedule_call|send_info|handle_objection|discard|follow_up>"
+  "detected_intent": "<interest|objection|pricing|timing|referral|not_interested|unsubscribe|complaint|unclear>",
+  "suggested_next_action": "<schedule_call|send_info|handle_objection|discard|follow_up|escalate>"
 }
 
 Rules:
@@ -146,8 +146,11 @@ Rules:
 - Match the persona tone precisely
 - Keep it concise — under 150 words
 - Never mention AI or automation
-- Never fabricate pricing or specific metrics
-- The draft should feel like it was written personally by the sender`;
+- Never fabricate pricing or specific metrics — if pricing is asked and no approved rates are available, set suggested_next_action to "escalate" and write a draft that says a manager will follow up with pricing
+- The draft should feel like it was written personally by the sender
+- If detected_intent is "unsubscribe": set draft to a brief polite acknowledgement (e.g. "Understood — removing you from our list. All the best."), set suggested_next_action to "discard", confidence_score to 0.99
+- If detected_intent is "complaint": set suggested_next_action to "escalate", set confidence_score below 0.5, draft should be a neutral acknowledgement only — no promises, no specifics
+- If the message is rude, aggressive, or contains offensive language: set suggested_next_action to "escalate"`;
 }
 
 function buildUserMessage(p: DraftParams): string {

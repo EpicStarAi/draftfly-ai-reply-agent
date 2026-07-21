@@ -142,6 +142,12 @@ export async function postApprovalCard(params: ApprovalCardParams): Promise<stri
             action_id: "draft_discard",
             value: String(params.draftId),
           },
+          {
+            type: "button",
+            text: { type: "plain_text", text: "🚨 Escalate" },
+            action_id: "draft_escalate",
+            value: String(params.draftId),
+          },
         ],
       },
     ],
@@ -281,10 +287,41 @@ export async function postEphemeral(params: {
   }
 }
 
+export async function postEscalationAlert(params: {
+  channelId: string;
+  botToken?: string;
+  draftId: number;
+  leadName: string;
+  leadEmail: string;
+  campaignName: string;
+  operatorName?: string;
+}): Promise<void> {
+  if (!isSlackConfigured() && !params.botToken) return;
+  try {
+    const client = getClient(params.botToken);
+    const byLine = params.operatorName ? ` by ${params.operatorName}` : "";
+    await client.chat.postMessage({
+      channel: params.channelId,
+      text: `🚨 Draft escalated${byLine} — manual review required`,
+      blocks: [
+        {
+          type: "section",
+          text: {
+            type: "mrkdwn",
+            text: `🚨 *Draft escalated${byLine}*\n\n*Lead:* ${params.leadName} (${params.leadEmail})\n*Campaign:* ${params.campaignName}\n*Draft ID:* #${params.draftId}\n\nThis draft requires manual review before any reply is sent. No automated action will be taken.`,
+          },
+        },
+      ],
+    });
+  } catch (err) {
+    logger.warn({ err }, "Failed to post escalation alert");
+  }
+}
+
 export async function updateMessageAfterAction(
   channelId: string,
   ts: string,
-  action: "sent" | "edited" | "discarded" | "send_failed",
+  action: "sent" | "edited" | "discarded" | "send_failed" | "escalated",
   operatorName?: string,
   botToken?: string,
   errorDetail?: string,
@@ -297,6 +334,7 @@ export async function updateMessageAfterAction(
     edited: "✏️ Reply edited and sent",
     discarded: "🗑️ Draft discarded",
     send_failed: "❌ Send failed — reply was not delivered",
+    escalated: "🚨 Escalated — manual review required",
   };
 
   const byLine = operatorName ? ` by ${operatorName}` : "";
