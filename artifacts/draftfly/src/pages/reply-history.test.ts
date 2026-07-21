@@ -80,3 +80,25 @@ describe("getInitialFilters — URL → dropdown state", () => {
     expect(getInitialFilters("status=").status).toBe("all");
   });
 });
+
+describe("getInitialFilters — share-link preservation on first mount", () => {
+  it("a full share link URL is parsed without any param being lost", () => {
+    const shareSearch = "status=sent&clientId=3&campaignId=7";
+    const filters = getInitialFilters(shareSearch);
+    expect(filters).toEqual({ status: "sent", client: "3", campaign: "7" });
+  });
+
+  it("a partial share link with only clientId is parsed and the rest default to 'all'", () => {
+    const filters = getInitialFilters("clientId=4");
+    expect(filters.client).toBe("4");
+    expect(filters.status).toBe("all");
+    expect(filters.campaign).toBe("all");
+  });
+
+  it("initial state from a share URL is not discarded when search is empty on re-render", () => {
+    const fromUrl = getInitialFilters("status=pending&clientId=2&campaignId=11");
+    const fromEmpty = getInitialFilters("");
+    expect(fromUrl).toEqual({ status: "pending", client: "2", campaign: "11" });
+    expect(fromEmpty).toEqual({ status: "all", client: "all", campaign: "all" });
+  });
+});

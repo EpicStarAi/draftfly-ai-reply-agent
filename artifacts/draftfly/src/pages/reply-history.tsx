@@ -1,5 +1,5 @@
 import { useListDrafts, useListCampaigns, useListClients } from "@workspace/api-client-react";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { Link, useSearch, useLocation } from "wouter";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card } from "@/components/ui/card";
@@ -26,6 +26,7 @@ export default function ReplyHistoryPage() {
   const [campaignFilter, setCampaignFilter] = useState<string>(initial.campaign);
   const [clientFilter, setClientFilter] = useState<string>(initial.client);
   const [copied, setCopied] = useState(false);
+  const isMounted = useRef(false);
 
   const syncToUrl = useCallback(
     (status: string, client: string, campaign: string) => {
@@ -41,6 +42,10 @@ export default function ReplyHistoryPage() {
   );
 
   useEffect(() => {
+    if (!isMounted.current) {
+      isMounted.current = true;
+      return;
+    }
     syncToUrl(statusFilter, clientFilter, campaignFilter);
   }, [statusFilter, clientFilter, campaignFilter, syncToUrl]);
 
