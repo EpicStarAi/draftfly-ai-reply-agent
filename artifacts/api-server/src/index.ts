@@ -2,9 +2,12 @@ import app from "./app";
 import { logger } from "./lib/logger";
 import { runMigrations } from "stripe-replit-sync";
 import { getStripeSync } from "./stripeClient";
-// staleDraftSweeper import retained for manual use only — NOT started automatically.
-// Auto-sweeping is disabled: no draft is ever changed without explicit operator action in Slack.
-// import { startStaleDraftSweeper } from "./lib/staleDraftSweeper";
+// No background sender, sweeper, cron or queue is started here — by design.
+// The auto-sweep that used to run on a timer has been removed entirely
+// (see lib/staleDraftSweeper.ts). The only thing that can move a draft to a
+// lead is approveAndSend(), and it only runs from a verified Slack/Telegram
+// approval click.
+import { assertApprovalRequired } from "./lib/approvalGate";
 
 const rawPort = process.env["PORT"];
 
@@ -45,6 +48,15 @@ async function initStripe() {
   }
 }
 
+// Fail fast at boot if the approval gate is not active. In production this can
+// never be switched off; elsewhere it surfaces a misconfigured environment
+// before a single webhook is accepted.
+assertApprovalRequired();
+logger.info(
+  { approvalRequired: true, nodeEnv: process.env.NODE_ENV },
+  "Approval gate active — replies can only be dispatched via approveAndSend()",
+);
+
 await initStripe();
 
 app.listen(port, (err) => {
@@ -54,5 +66,4 @@ app.listen(port, (err) => {
   }
 
   logger.info({ port }, "Server listening");
-  // Auto-sweep disabled: manual Slack approval is the only way to action a draft.
 });

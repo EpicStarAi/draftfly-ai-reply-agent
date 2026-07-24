@@ -40,6 +40,12 @@ const mocks = vi.hoisted(() => {
     editedReplyText: null as string | null,
     slackMessageTs: "C123|1234567890.123456" as string | null,
     actionedAt: null,
+    // Approval columns — written by recordApproval() on modal submit.
+    approved: false,
+    approvedBy: null as string | null,
+    approvedAt: null as Date | null,
+    approvalSource: null as string | null,
+    approvalRef: null as string | null,
   };
 
   const campaignRow = {
@@ -53,6 +59,8 @@ const mocks = vi.hoisted(() => {
     campaignRow,
     dbUpdateSets: [] as object[],
     dbInsertValues: [] as object[],
+    /** Idempotency claims taken during a test — mirrors the UNIQUE constraint. */
+    claimedKeys: new Set<string>(),
     sendReply: vi.fn<() => Promise<{ ok: boolean; error?: string }>>(),
     verifyIncomingRequest: vi.fn(() => true),
     updateMessageAfterAction: vi.fn<
@@ -67,6 +75,8 @@ const mocks = vi.hoisted(() => {
 
 vi.mock("drizzle-orm", () => ({
   eq: vi.fn((_col: unknown, _val: unknown) => ({ _col, _val })),
+  and: vi.fn((...args: unknown[]) => ({ _and: args })),
+  inArray: vi.fn((_col: unknown, vals: unknown[]) => ({ _in: vals })),
 }));
 
 vi.mock("../lib/lemlist", async (importOriginal) => {
@@ -96,6 +106,15 @@ vi.mock("@workspace/db", () => {
   const activityTable = { _name: "activity" };
 
   const clientRow = { id: 1, slackBotToken: null };
+  const replySendsTable = { _name: "reply_sends", sendKey: {} };
+  const inboundRepliesTable = { _name: "inbound_replies", idempotencyKey: {} };
+
+  /** Emulates INSERT ... ON CONFLICT DO NOTHING RETURNING against a UNIQUE index. */
+  const claim = (key: string) => () => {
+    if (mocks.claimedKeys.has(key)) return Promise.resolve([]);
+    mocks.claimedKeys.add(key);
+    return Promise.resolve([{ id: mocks.claimedKeys.size }]);
+  };
 
   return {
     draftsTable,
@@ -103,6 +122,8 @@ vi.mock("@workspace/db", () => {
     clientsTable,
     logsTable,
     activityTable,
+    replySendsTable,
+    inboundRepliesTable,
     db: {
       select: () => ({
         from: (table: object) => ({
@@ -117,15 +138,33 @@ vi.mock("@workspace/db", () => {
           },
         }),
       }),
-      update: (_table: object) => ({
-        set: (values: object) => {
+      update: (table: object) => ({
+        set: (values: Record<string, unknown>) => {
           mocks.dbUpdateSets.push(values);
-          return { where: () => Promise.resolve(undefined) };
+          // Reflect the write back onto the row, as Postgres would.
+          if (table === draftsTable) Object.assign(mocks.draftRow, values);
+          const p = Promise.resolve(undefined) as Promise<undefined> & { returning?: unknown };
+          p.returning = () => Promise.resolve([{ id: mocks.draftRow.id }]);
+          return { where: () => p };
         },
       }),
-      insert: (_table: object) => ({
-        values: (values: object) => {
+      insert: (table: object) => ({
+        values: (values: Record<string, unknown>) => {
           mocks.dbInsertValues.push(values);
+          const key =
+            table === replySendsTable ? String(values.sendKey) : String(values.idempotencyKey ?? "n/a");
+          const p = Promise.resolve(undefined) as Promise<undefined> & {
+            onConflictDoNothing?: unknown;
+            returning?: unknown;
+          };
+          p.onConflictDoNothing = () => ({ returning: claim(key) });
+          p.returning = () => Promise.resolve([{ ...mocks.draftRow }]);
+          return p;
+        },
+      }),
+      delete: (table: object) => ({
+        where: () => {
+          if (table === replySendsTable) mocks.claimedKeys.clear();
           return Promise.resolve(undefined);
         },
       }),
@@ -195,8 +234,14 @@ describe("Edit modal flow — end-to-end integration", () => {
     mocks.draftRow.editedReplyText = null;
     mocks.draftRow.slackMessageTs = "C123|1234567890.123456";
     mocks.campaignRow.current = { id: 1, name: "Test Campaign", lemlistCampaignId: "cam_abc123" };
+    mocks.draftRow.approved = false;
+    mocks.draftRow.approvedBy = null;
+    mocks.draftRow.approvedAt = null;
+    mocks.draftRow.approvalSource = null;
+    mocks.draftRow.approvalRef = null;
     mocks.dbUpdateSets.length = 0;
     mocks.dbInsertValues.length = 0;
+    mocks.claimedKeys.clear();
   });
 
   afterAll(() => {
@@ -368,6 +413,8 @@ describe("Edit modal flow — end-to-end integration", () => {
           campaignId: "cam_abc123",
           leadId: "lead@example.com",
         }),
+        // Second argument is the send authorization minted by approveAndSend()
+        expect.objectContaining({ approvalSource: "slack", approvedBy: "U_OPERATOR" }),
       );
 
       // Draft marked as sent (not send_failed)

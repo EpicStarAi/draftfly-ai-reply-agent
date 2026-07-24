@@ -12,6 +12,20 @@ const mockFetch = vi.fn<typeof fetch>();
 vi.stubGlobal("fetch", mockFetch);
 
 import { sendReply, testConnection, getCampaigns } from "./lemlist";
+import { claimSendAuthorizationMinter, __resetMinterClaimForTests } from "./sendAuthorization";
+
+// sendReply now requires a capability token. These tests exercise transport
+// behaviour, so they mint their own valid authorization for draft #1.
+__resetMinterClaimForTests();
+const mint = claimSendAuthorizationMinter("lemlist.test");
+const auth = () => mint({ draftId: 1, approvalSource: "slack", approvedBy: "U_TEST" });
+
+const sendParams = {
+  leadId: "lead@example.com",
+  campaignId: "cam_abc123",
+  replyText: "Hi there",
+  draftId: 1,
+};
 
 /** Builds a fetch mock that never resolves but rejects with AbortError when the
  * request's AbortSignal fires. */
@@ -65,12 +79,7 @@ describe("sendReply — AbortSignal timeout", () => {
   it("returns { ok: false, error: 'timeout' } when fetch hangs beyond timeoutMs", async () => {
     mockFetch.mockImplementation(makeHangingFetchMock());
 
-    const result = await sendReply({
-      leadId: "lead@example.com",
-      campaignId: "cam_abc123",
-      replyText: "Hi there",
-      timeoutMs: 50,
-    });
+    const result = await sendReply({ ...sendParams, timeoutMs: 50 }, auth());
 
     expect(result.ok).toBe(false);
     expect(result.error).toBe("timeout");
@@ -79,12 +88,7 @@ describe("sendReply — AbortSignal timeout", () => {
   it("does NOT return 'timeout' when fetch resolves before timeoutMs", async () => {
     mockFetch.mockImplementation(makeDelayedFetchMock(0));
 
-    const result = await sendReply({
-      leadId: "lead@example.com",
-      campaignId: "cam_abc123",
-      replyText: "Hi there",
-      timeoutMs: 5_000,
-    });
+    const result = await sendReply({ ...sendParams, timeoutMs: 5_000 }, auth());
 
     expect(result.ok).toBe(true);
     expect(result.error).toBeUndefined();
@@ -93,12 +97,7 @@ describe("sendReply — AbortSignal timeout", () => {
   it("returns { ok: false, error: 'timeout' } when fetch resolves only after timeoutMs", async () => {
     mockFetch.mockImplementation(makeDelayedFetchMock(300));
 
-    const result = await sendReply({
-      leadId: "lead@example.com",
-      campaignId: "cam_abc123",
-      replyText: "Hi there",
-      timeoutMs: 50,
-    });
+    const result = await sendReply({ ...sendParams, timeoutMs: 50 }, auth());
 
     expect(result.ok).toBe(false);
     expect(result.error).toBe("timeout");
@@ -107,14 +106,58 @@ describe("sendReply — AbortSignal timeout", () => {
   it("still throws non-abort errors rather than swallowing them", async () => {
     mockFetch.mockRejectedValue(new Error("ECONNREFUSED"));
 
+    await expect(sendReply({ ...sendParams, timeoutMs: 5_000 }, auth())).rejects.toThrow("ECONNREFUSED");
+  });
+});
+
+describe("sendReply — send authorization guard", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    process.env.LEMLIST_API_KEY = "test-key-for-timeout-tests";
+    mockFetch.mockImplementation(makeDelayedFetchMock(0));
+  });
+
+  afterEach(() => {
+    delete process.env.LEMLIST_API_KEY;
+  });
+
+  it("refuses to send without an authorization token", async () => {
     await expect(
-      sendReply({
-        leadId: "lead@example.com",
-        campaignId: "cam_abc123",
-        replyText: "Hi there",
-        timeoutMs: 5_000,
-      }),
-    ).rejects.toThrow("ECONNREFUSED");
+      // @ts-expect-error — deliberately calling the way an un-gated caller would
+      sendReply(sendParams),
+    ).rejects.toThrow(/no valid send authorization/i);
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
+  it("refuses a hand-rolled object that merely looks like an authorization", async () => {
+    const forged = {
+      draftId: 1,
+      approvalSource: "slack",
+      approvedBy: "U_ATTACKER",
+      issuedAt: Date.now(),
+    };
+    await expect(
+      sendReply(sendParams, forged as never),
+    ).rejects.toThrow(/no valid send authorization/i);
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
+  it("refuses an authorization scoped to a different draft", async () => {
+    await expect(
+      sendReply({ ...sendParams, draftId: 999 }, auth()),
+    ).rejects.toThrow(/scoped to draft 1, not draft 999/);
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
+  it("refuses an expired authorization", async () => {
+    const stale = mint({ draftId: 1, approvalSource: "slack", approvedBy: "U_TEST" });
+    vi.spyOn(Date, "now").mockReturnValue(stale.issuedAt + 61_000);
+    try {
+      await expect(sendReply(sendParams, stale)).rejects.toThrow(/expired/i);
+      expect(mockFetch).not.toHaveBeenCalled();
+    } finally {
+      vi.mocked(Date.now).mockRestore();
+    }
   });
 });
 

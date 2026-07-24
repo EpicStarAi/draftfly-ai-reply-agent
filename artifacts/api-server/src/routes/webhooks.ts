@@ -13,6 +13,7 @@ import { generateDraftReply, isValidDraftText } from "../lib/claude";
 import { postApprovalCard, isSlackConfigured, postUnmatchedCampaignAlert } from "../lib/slack";
 import { isLemlistConfigured, requireWebhookSecret } from "../lib/lemlist";
 import type { LemlistWebhookPayload } from "../lib/lemlist";
+import { claimInboundReply, linkClaimToDraft, releaseInboundClaim } from "../lib/idempotency";
 import { logger } from "../lib/logger";
 
 const router: IRouter = Router();
@@ -160,13 +161,52 @@ function isAutoReply(text: string, fromEmail?: string): boolean {
 
 // ─── Core processing logic ──────────────────────────────────────────────────
 
-async function processLemlistReply(payload: LemlistWebhookPayload): Promise<{
+interface ProcessResult {
   draftId?: number;
   generatedDraft?: string;
   confidenceScore?: number;
   detectedIntent?: string;
   slackTs?: string | null;
-}> {
+  /** True when this delivery was a duplicate and nothing was done. */
+  duplicate?: boolean;
+}
+
+/**
+ * Idempotent entry point for an inbound Lemlist reply.
+ *
+ * Claims the event against a UNIQUE index before doing any work. A redelivery
+ * of the same reply — Lemlist retry, n8n retry, double-fire — is dropped here,
+ * so it can never produce a second draft or a second approval card.
+ */
+async function processLemlistReply(payload: LemlistWebhookPayload): Promise<ProcessResult> {
+  const claim = await claimInboundReply(payload);
+  if (!claim.claimed) {
+    return { duplicate: true };
+  }
+
+  try {
+    const result = await generateDraftForReply(payload);
+    if (result.draftId) {
+      await linkClaimToDraft(claim.idempotencyKey, result.draftId);
+    } else {
+      // No draft was produced (auto-reply, unmatched campaign, missing client).
+      // The claim stays: re-processing the same event would reach the same
+      // conclusion and only add noise.
+      logger.debug(
+        { idempotencyKey: claim.idempotencyKey },
+        "processLemlistReply: no draft produced — claim retained",
+      );
+    }
+    return result;
+  } catch (err) {
+    // Processing blew up before a draft existed — release the claim so a
+    // genuine Lemlist retry is still able to get through.
+    await releaseInboundClaim(claim.idempotencyKey);
+    throw err;
+  }
+}
+
+async function generateDraftForReply(payload: LemlistWebhookPayload): Promise<ProcessResult> {
   // 1. Find campaign by Lemlist campaign ID, with fallback to numeric DB ID
   const campaignIdStr = String(payload.campaignId);
   const numericId = parseInt(campaignIdStr, 10);

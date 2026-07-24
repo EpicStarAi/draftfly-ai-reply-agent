@@ -12,10 +12,34 @@ import {
   postEscalationAlert,
   isSlackConfigured,
 } from "../lib/slack";
-import { sendReply } from "../lib/lemlist";
+import { approveAndSend } from "../lib/approveAndSend";
+import { recordApproval, type ApproverContext } from "../lib/approvalGate";
 import { logger } from "../lib/logger";
 
 const router: IRouter = Router();
+
+/**
+ * Build the approver context for a Slack interaction.
+ *
+ * `signatureVerified` is threaded through from the actual result of
+ * `verifyIncomingRequest` — it is never hardcoded true. The approval gate
+ * refuses any context where it is not true, so an unsigned or replayed payload
+ * cannot approve a reply.
+ */
+function slackApproverContext(params: {
+  userId: string;
+  teamId: string;
+  signatureVerified: boolean;
+  interactionRef?: string;
+}): ApproverContext {
+  return {
+    source: "slack",
+    userId: params.userId,
+    teamId: params.teamId,
+    signatureVerified: params.signatureVerified,
+    interactionRef: params.interactionRef,
+  };
+}
 
 // ─── Background action processor ───────────────────────────────────────────
 // Runs after Slack has been acknowledged. Handles DB updates, Lemlist dispatch,
@@ -27,8 +51,9 @@ async function processSlackAction(params: {
   actionId: string;
   userId: string;
   teamId: string;
+  signatureVerified: boolean;
 }): Promise<void> {
-  const { draftId, newStatus, actionId, userId, teamId } = params;
+  const { draftId, newStatus, actionId, userId, teamId, signatureVerified } = params;
 
   // Fetch draft
   const [draft] = await db.select().from(draftsTable).where(eq(draftsTable.id, draftId));
@@ -84,20 +109,37 @@ async function processSlackAction(params: {
     }
 
     const replyText = draft.editedReplyText ?? draft.replyText;
+    const approver = slackApproverContext({ userId, teamId, signatureVerified, interactionRef: actionId });
+
+    // Record the human approval FIRST. This is the only writer of the approved
+    // flag, and it only accepts a verified Slack interaction.
+    const approval = await recordApproval(draftId, approver);
+    if (!approval.approved) {
+      logger.info({ draftId, reason: approval.reason }, "Slack send: approval could not be recorded — not sending");
+      return;
+    }
+
     try {
-      const result = await sendReply({
-        leadId: draft.prospectEmail,
-        campaignId: campaign.lemlistCampaignId,
+      const outcome = await approveAndSend(draftId, approver, {
         replyText,
+        lemlistCampaignId: campaign.lemlistCampaignId,
       });
-      if (!result.ok) {
-        lemlistError = result.error;
-        logger.error({ draftId, lemlistError }, "Lemlist sendReply failed — draft left pending");
+      if (outcome.status === "already_sent") {
+        logger.info({ draftId }, "Slack send: reply already dispatched — ignoring duplicate");
+        return;
+      }
+      if (outcome.status === "not_found") {
+        logger.warn({ draftId }, "Slack send: draft vanished before dispatch");
+        return;
+      }
+      if (outcome.status === "send_failed") {
+        lemlistError = outcome.error;
+        logger.error({ draftId, lemlistError }, "Lemlist dispatch failed — draft left pending");
         finalStatus = "pending" as unknown as "sent"; // keep pending; cast to reuse variable
       }
     } catch (err) {
       lemlistError = err instanceof Error ? err.message : String(err);
-      logger.error({ err, draftId }, "Lemlist sendReply threw — draft left pending");
+      logger.error({ err, draftId }, "approveAndSend threw — draft left pending");
       finalStatus = "pending" as unknown as "sent";
     }
 
@@ -214,8 +256,9 @@ async function processEditSubmission(params: {
   editedText: string;
   userId: string;
   teamId: string;
+  signatureVerified: boolean;
 }): Promise<void> {
-  const { draftId, editedText, userId, teamId } = params;
+  const { draftId, editedText, userId, teamId, signatureVerified } = params;
 
   const [draft] = await db.select().from(draftsTable).where(eq(draftsTable.id, draftId));
   if (!draft) {
@@ -261,19 +304,44 @@ async function processEditSubmission(params: {
   }
 
   let lemlistError: string | undefined;
+  const approver = slackApproverContext({
+    userId,
+    teamId,
+    signatureVerified,
+    interactionRef: "draft_edit_modal",
+  });
+
+  // Submitting the edit modal IS the approval action — but it still goes
+  // through the same single writer, with the same verification requirements.
+  const approval = await recordApproval(draftId, approver);
+  if (!approval.approved) {
+    logger.info(
+      { draftId, reason: approval.reason },
+      "Slack edit submit: approval could not be recorded — not sending",
+    );
+    return;
+  }
+
   try {
-    const result = await sendReply({
-      leadId: draft.prospectEmail,
-      campaignId: campaign.lemlistCampaignId,
+    const outcome = await approveAndSend(draftId, approver, {
       replyText: editedText,
+      lemlistCampaignId: campaign.lemlistCampaignId,
     });
-    if (!result.ok) {
-      lemlistError = result.error;
-      logger.error({ draftId, lemlistError }, "Lemlist sendReply failed after edit — draft left pending");
+    if (outcome.status === "already_sent") {
+      logger.info({ draftId }, "Slack edit submit: reply already dispatched — ignoring duplicate");
+      return;
+    }
+    if (outcome.status === "not_found") {
+      logger.warn({ draftId }, "Slack edit submit: draft vanished before dispatch");
+      return;
+    }
+    if (outcome.status === "send_failed") {
+      lemlistError = outcome.error;
+      logger.error({ draftId, lemlistError }, "Lemlist dispatch failed after edit — draft left pending");
     }
   } catch (err) {
     lemlistError = err instanceof Error ? err.message : String(err);
-    logger.error({ err, draftId }, "Lemlist sendReply threw after edit — draft left pending");
+    logger.error({ err, draftId }, "approveAndSend threw after edit — draft left pending");
   }
 
   if (lemlistError) {
@@ -370,8 +438,14 @@ async function processEditSubmission(params: {
 router.post("/slack/actions", async (req, res): Promise<void> => {
   const rawBody = (req as unknown as { rawBody?: string }).rawBody ?? JSON.stringify(req.body);
 
-  // Verify Slack signature before doing anything else
-  if (!verifyIncomingRequest(rawBody, req.headers as Record<string, string | undefined>)) {
+  // Verify Slack signature before doing anything else. The result is carried
+  // forward into the approver context — the approval gate refuses to record an
+  // approval unless this was genuinely true for THIS request.
+  const signatureVerified = verifyIncomingRequest(
+    rawBody,
+    req.headers as Record<string, string | undefined>,
+  );
+  if (!signatureVerified) {
     req.log.warn("Slack signature verification failed");
     res.status(401).json({ error: "Invalid signature" });
     return;
@@ -428,7 +502,7 @@ router.post("/slack/actions", async (req, res): Promise<void> => {
     // Ack to close the modal, then process asynchronously
     res.status(200).json({});
 
-    void processEditSubmission({ draftId, editedText, userId, teamId })
+    void processEditSubmission({ draftId, editedText, userId, teamId, signatureVerified })
       .catch((err) => req.log.error({ err, draftId }, "processEditSubmission failed unexpectedly"));
     return;
   }
@@ -584,8 +658,14 @@ router.post("/slack/actions", async (req, res): Promise<void> => {
   // All processing (DB updates, Lemlist call, Slack message update) runs asynchronously.
   res.status(200).json({});
 
-  void processSlackAction({ draftId, newStatus, actionId: action.action_id, userId, teamId })
-    .catch((err) => req.log.error({ err, draftId }, "processSlackAction failed unexpectedly"));
+  void processSlackAction({
+    draftId,
+    newStatus,
+    actionId: action.action_id,
+    userId,
+    teamId,
+    signatureVerified,
+  }).catch((err) => req.log.error({ err, draftId }, "processSlackAction failed unexpectedly"));
 });
 
 // POST /slack/test-message — send a test approval card to a channel

@@ -1,4 +1,6 @@
+import { timingSafeEqual } from "node:crypto";
 import { logger } from "./logger";
+import { assertSendAuthorization, type SendAuthorization } from "./sendAuthorization";
 import type {
   Request as ExpressRequest,
   Response as ExpressResponse,
@@ -16,15 +18,52 @@ export function isWebhookSecretConfigured(): boolean {
 }
 
 /**
- * Express middleware that verifies incoming Lemlist webhook requests carry the
- * correct shared secret — either in the `X-Webhook-Secret` header (n8n path)
- * or as a `?secret=` query parameter (direct Lemlist registration path, since
- * Lemlist does not support custom headers on outgoing webhooks).
+ * Whether the legacy `?secret=` query-string credential is still accepted.
  *
- * - If `LEMLIST_WEBHOOK_SECRET` is set: either source must match exactly; mismatches
- *   return 401 and the request is dropped.
- * - If `LEMLIST_WEBHOOK_SECRET` is not set: requests are rejected with 503 so the
- *   endpoint is disabled rather than open to anyone.
+ * TEMPORARY compatibility shim. Lemlist's outgoing webhooks did not support
+ * custom headers when this integration was built, so the secret lived in the
+ * URL — where it lands in access logs, proxy logs and browser history.
+ *
+ * Default: enabled, so updating this service does not break the currently
+ * registered production webhook. Once the Lemlist webhook is re-registered with
+ * a header credential, set ALLOW_QUERY_WEBHOOK_SECRET=false and then delete the
+ * query branch below entirely.
+ */
+export function isQuerySecretAllowed(): boolean {
+  return process.env.ALLOW_QUERY_WEBHOOK_SECRET !== "false";
+}
+
+/** Constant-time comparison that does not leak length through early return. */
+function secretsMatch(provided: string, expected: string): boolean {
+  const a = Buffer.from(provided, "utf8");
+  const b = Buffer.from(expected, "utf8");
+  if (a.length !== b.length) {
+    // Still burn a comparison so timing does not distinguish "wrong length"
+    // from "wrong value".
+    timingSafeEqual(b, b);
+    return false;
+  }
+  return timingSafeEqual(a, b);
+}
+
+function readHeader(req: ExpressRequest, name: string): string | undefined {
+  const raw = req.headers[name];
+  return Array.isArray(raw) ? raw[0] : raw;
+}
+
+/**
+ * Express middleware that verifies incoming Lemlist webhook requests carry the
+ * correct shared secret.
+ *
+ * Accepted sources, in priority order:
+ *   1. `Authorization: Bearer <secret>`      ← preferred
+ *   2. `X-DraftFly-Signature: <secret>`      ← preferred
+ *   3. `X-Webhook-Secret: <secret>`          ← existing n8n path
+ *   4. `?secret=<secret>`                    ← legacy, behind ALLOW_QUERY_WEBHOOK_SECRET
+ *
+ * - If `LEMLIST_WEBHOOK_SECRET` is not set the endpoint is disabled (503) rather
+ *   than open to anyone.
+ * - Mismatches return 401 and the request is dropped.
  */
 export function requireWebhookSecret(req: ExpressRequest, res: ExpressResponse, next: NextFunction): void {
   const secret = process.env.LEMLIST_WEBHOOK_SECRET;
@@ -41,17 +80,47 @@ export function requireWebhookSecret(req: ExpressRequest, res: ExpressResponse, 
     return;
   }
 
-  const fromHeader = req.headers["x-webhook-secret"];
-  const fromQuery = req.query["secret"];
-  const provided = fromHeader ?? fromQuery;
+  const authHeader = readHeader(req, "authorization");
+  const bearer = authHeader?.startsWith("Bearer ") ? authHeader.slice("Bearer ".length).trim() : undefined;
+  const signature = readHeader(req, "x-draftfly-signature");
+  const legacyHeader = readHeader(req, "x-webhook-secret");
 
-  if (!provided || provided !== secret) {
+  const queryRaw = req.query["secret"];
+  const queryValue = typeof queryRaw === "string" ? queryRaw : undefined;
+  const queryAllowed = isQuerySecretAllowed();
+  const fromQuery = queryAllowed ? queryValue : undefined;
+
+  const provided = bearer ?? signature ?? legacyHeader ?? fromQuery;
+  const source = bearer
+    ? "authorization-bearer"
+    : signature
+      ? "x-draftfly-signature"
+      : legacyHeader
+        ? "x-webhook-secret"
+        : fromQuery
+          ? "query"
+          : "none";
+
+  if (!provided || !secretsMatch(provided, secret)) {
     logger.warn(
-      { path: req.path, hasHeader: !!fromHeader, hasQuery: !!fromQuery },
+      {
+        path: req.path,
+        source,
+        queryPresentButDisabled: !!queryValue && !queryAllowed,
+      },
       "Lemlist webhook rejected — missing or invalid secret",
     );
     res.status(401).json({ ok: false, error: "Unauthorized: invalid or missing webhook secret" });
     return;
+  }
+
+  if (source === "query") {
+    logger.warn(
+      { path: req.path },
+      "Lemlist webhook authenticated via the deprecated ?secret= query parameter. " +
+        "Re-register the webhook with an Authorization or X-DraftFly-Signature header, " +
+        "then set ALLOW_QUERY_WEBHOOK_SECRET=false.",
+    );
   }
 
   next();
@@ -163,13 +232,32 @@ export async function getCampaigns(opts?: {
 
 export const SEND_REPLY_TIMEOUT_MS = 30_000;
 
-export async function sendReply(params: {
-  leadId: string;
-  campaignId: string;
-  replyText: string;
-  /** Override the default 30 s timeout — useful in tests. */
-  timeoutMs?: number;
-}): Promise<{ ok: boolean; error?: string }> {
+/**
+ * Dispatch a reply to a lead via Lemlist.
+ *
+ * ⚠️ This is the ONLY function in the codebase that puts a reply in front of a
+ * lead. It cannot be called directly: it requires a `SendAuthorization`
+ * capability token, and `approveAndSend()` is the only module able to mint one.
+ * Do not add another caller — add it to approveAndSend() instead.
+ *
+ * @param authorization capability token proving a human approved this draft
+ */
+export async function sendReply(
+  params: {
+    leadId: string;
+    campaignId: string;
+    replyText: string;
+    /** Override the default 30 s timeout — useful in tests. */
+    timeoutMs?: number;
+    /** Draft this send belongs to — checked against the authorization scope. */
+    draftId: number;
+  },
+  authorization: SendAuthorization,
+): Promise<{ ok: boolean; error?: string }> {
+  // Approval gate, restated at the transport layer. Even if every check above
+  // were bypassed, an unauthorized send stops here.
+  assertSendAuthorization(authorization, params.draftId);
+
   if (!isLemlistConfigured()) {
     throw new Error("LEMLIST_API_KEY is not configured. Add it to Replit Secrets to send replies.");
   }
