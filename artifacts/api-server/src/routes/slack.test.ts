@@ -22,6 +22,7 @@ const {
   mockUpdateMessageAfterAction,
   mockPostFallbackFailureNotification,
   mockDraftRow,
+  claimedSendKeys,
 } = vi.hoisted(() => {
   const draftRow = {
     id: 1,
@@ -36,6 +37,12 @@ const {
     editedReplyText: null,
     slackMessageTs: null as string | null,
     actionedAt: null,
+    // Approval columns — written by recordApproval() during the Slack action.
+    approved: false,
+    approvedBy: null as string | null,
+    approvedAt: null as Date | null,
+    approvalSource: null as string | null,
+    approvalRef: null as string | null,
   };
   return {
     mockSendReply: vi.fn<() => Promise<{ ok: boolean; error?: string }>>(),
@@ -43,6 +50,8 @@ const {
     mockUpdateMessageAfterAction: vi.fn(() => Promise.resolve()),
     mockPostFallbackFailureNotification: vi.fn(() => Promise.resolve()),
     mockDraftRow: draftRow,
+    /** Idempotency claims taken during a test — mirrors the UNIQUE constraint. */
+    claimedSendKeys: new Set<string>(),
   };
 });
 
@@ -52,6 +61,7 @@ const {
 vi.mock("drizzle-orm", () => ({
   eq: vi.fn((_col: unknown, _val: unknown) => ({ _col, _val })),
   and: vi.fn((...args: unknown[]) => ({ _and: args })),
+  inArray: vi.fn((_col: unknown, vals: unknown[]) => ({ _in: vals })),
 }));
 
 vi.mock("../lib/lemlist", async (importOriginal) => {
@@ -100,6 +110,9 @@ vi.mock("@workspace/db", () => {
     slackBotToken: null,
   };
 
+  const replySendsTable = { _name: "reply_sends", sendKey: {} };
+  const inboundRepliesTable = { _name: "inbound_replies", idempotencyKey: {} };
+
   const rowsByTable = new Map<object, unknown[]>([
     [draftsTable, [mockDraftRow]],
     [campaignsTable, [campaignRow]],
@@ -108,32 +121,70 @@ vi.mock("@workspace/db", () => {
     [activityTable, []],
   ]);
 
+  /** Emulates INSERT ... ON CONFLICT DO NOTHING RETURNING against a UNIQUE index. */
+  const claim = (key: string) => () => {
+    if (claimedSendKeys.has(key)) return Promise.resolve([]);
+    claimedSendKeys.add(key);
+    return Promise.resolve([{ id: claimedSendKeys.size }]);
+  };
+
   return {
     draftsTable,
     campaignsTable,
     clientsTable,
     logsTable,
     activityTable,
+    replySendsTable,
+    inboundRepliesTable,
     db: {
       select: () => ({
         from: (table: object) => ({
           where: () => Promise.resolve(rowsByTable.get(table) ?? []),
         }),
       }),
-      update: () => ({
-        set: () => ({
-          where: () => Promise.resolve(undefined),
-        }),
+      update: (table: object) => ({
+        set: (values: Record<string, unknown>) => {
+          // Reflect approval/status writes onto the row, as Postgres would.
+          if (table === draftsTable) Object.assign(mockDraftRow, values);
+          const p = Promise.resolve(undefined) as Promise<undefined> & { returning?: unknown };
+          p.returning = () => Promise.resolve([{ id: mockDraftRow.id }]);
+          return { where: () => p };
+        },
       }),
-      insert: () => ({
-        values: () => Promise.resolve(undefined),
+      insert: (table: object) => ({
+        values: (values: Record<string, unknown>) => {
+          const key =
+            table === replySendsTable ? String(values.sendKey) : String(values.idempotencyKey ?? "n/a");
+          const p = Promise.resolve(undefined) as Promise<undefined> & {
+            onConflictDoNothing?: unknown;
+            returning?: unknown;
+          };
+          p.onConflictDoNothing = () => ({ returning: claim(key) });
+          p.returning = () => Promise.resolve([{ ...mockDraftRow }]);
+          return p;
+        },
       }),
-      delete: () => ({
-        where: () => Promise.resolve(undefined),
+      delete: (table: object) => ({
+        where: () => {
+          if (table === replySendsTable) claimedSendKeys.clear();
+          return Promise.resolve(undefined);
+        },
       }),
     },
   };
 });
+
+// ─── Shared reset ─────────────────────────────────────────────────────────────
+
+/** Return the draft to an un-approved state and free any idempotency claim. */
+function resetApproval(): void {
+  mockDraftRow.approved = false;
+  mockDraftRow.approvedBy = null;
+  mockDraftRow.approvedAt = null;
+  mockDraftRow.approvalSource = null;
+  mockDraftRow.approvalRef = null;
+  claimedSendKeys.clear();
+}
 
 // ─── App import (must come after vi.mock calls) ───────────────────────────────
 
@@ -184,6 +235,7 @@ describe("POST /api/slack/actions — 3-second timeout guarantee", () => {
     // Reset slackMessageTs so ack-timing tests are unaffected by Slack update calls
     mockDraftRow.slackMessageTs = null;
     mockDraftRow.status = "pending";
+    resetApproval();
   });
 
   afterAll(() => {
@@ -344,6 +396,7 @@ describe("POST /api/slack/actions — send_failed Slack card update", () => {
     // Give the draft a Slack message so the update path fires
     mockDraftRow.slackMessageTs = SLACK_MSG_TS;
     mockDraftRow.status = "pending";
+    resetApproval();
   });
 
   afterAll(() => {

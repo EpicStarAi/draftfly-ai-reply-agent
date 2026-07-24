@@ -101,6 +101,12 @@ vi.mock("@workspace/db", () => {
     [activityTable, () => []],
   ]);
 
+  // These tests are about Slack channel routing, not idempotency (that has its
+  // own suite), so the inbound claim is always granted.
+  const inboundRepliesTable = { _name: "inbound_replies", idempotencyKey: {} };
+  const replySendsTable = { _name: "reply_sends", sendKey: {} };
+  let claimId = 0;
+
   return {
     draftsTable,
     campaignsTable,
@@ -108,6 +114,8 @@ vi.mock("@workspace/db", () => {
     logsTable,
     activityTable,
     personasTable,
+    inboundRepliesTable,
+    replySendsTable,
     db: {
       select: () => ({
         from: (table: object) => ({
@@ -144,6 +152,11 @@ vi.mock("@workspace/db", () => {
 
       insert: (table: object) => ({
         values: () => {
+          if (table === inboundRepliesTable || table === replySendsTable) {
+            return {
+              onConflictDoNothing: () => ({ returning: () => Promise.resolve([{ id: ++claimId }]) }),
+            };
+          }
           if (table === draftsTable) {
             return { returning: () => Promise.resolve([draftRow]) };
           }

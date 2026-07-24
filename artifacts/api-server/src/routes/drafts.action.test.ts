@@ -126,32 +126,51 @@ describe("PATCH /api/drafts/:id/action — send_failed retry cleanup", () => {
     vi.restoreAllMocks();
   });
 
-  it("deletes stale draft_send_failed activity when send_failed draft is sent via web action", async () => {
+  // ── The REST route may no longer send ──────────────────────────────────────
+  //
+  // This route used to mark a draft "sent" without approval and without ever
+  // calling Lemlist. Sending now requires a verified Slack approval, so the
+  // action is refused outright rather than silently lying about the outcome.
+
+  it("refuses action=send with 403 — sending requires Slack approval", async () => {
     const res = await request(app)
       .patch("/api/drafts/55/action")
       .send({ action: "send" });
 
-    expect(res.status).toBe(200);
-    expect(mocks.dbDeleteWheres).toHaveLength(1);
+    expect(res.status).toBe(403);
+    expect(res.body.code).toBe("APPROVAL_REQUIRED");
   });
 
-  it("inserts draft_sent (not draft_send_failed) activity after successful web-action retry", async () => {
-    await request(app)
-      .patch("/api/drafts/55/action")
-      .send({ action: "send" });
+  it("does not touch the draft when action=send is refused", async () => {
+    await request(app).patch("/api/drafts/55/action").send({ action: "send" });
 
-    const insertedTypes = mocks.dbInsertValues
-      .map((v) => (v as { type?: string }).type)
-      .filter(Boolean);
-
-    expect(insertedTypes).toContain("draft_sent");
-    expect(insertedTypes).not.toContain("draft_send_failed");
+    expect(mocks.dbUpdateSets).toHaveLength(0);
+    expect(mocks.dbInsertValues).toHaveLength(0);
+    expect(mocks.dbDeleteWheres).toHaveLength(0);
   });
 
-  it("scopes the delete to the correct draftId and type", async () => {
+  it("never writes a draft_sent activity entry from the REST route", async () => {
+    await request(app).patch("/api/drafts/55/action").send({ action: "send" });
+
+    const insertedTypes = mocks.dbInsertValues.map((v) => (v as { type?: string }).type);
+    expect(insertedTypes).not.toContain("draft_sent");
+  });
+
+  it("refuses action=send on a plain pending draft too", async () => {
+    mocks.draftRow.status = "pending";
+
+    const res = await request(app).patch("/api/drafts/55/action").send({ action: "send" });
+
+    expect(res.status).toBe(403);
+    expect(mocks.dbUpdateSets).toHaveLength(0);
+  });
+
+  // ── Edit and discard still work, including activity cleanup ────────────────
+
+  it("scopes the stale-failure delete to the correct draftId and type", async () => {
     await request(app)
       .patch("/api/drafts/55/action")
-      .send({ action: "send" });
+      .send({ action: "edit", editedText: "Operator rewrite" });
 
     type DeleteCondition = { _and: Array<{ _val: unknown }> };
     const condition = mocks.dbDeleteWheres[0] as DeleteCondition;
@@ -161,38 +180,31 @@ describe("PATCH /api/drafts/:id/action — send_failed retry cleanup", () => {
     expect(vals).toContain("draft_send_failed");
   });
 
-  it("activity feed ends up with exactly one draft_sent and no draft_send_failed after web retry", async () => {
+  it("activity feed ends up with exactly one draft_edited and no draft_send_failed", async () => {
     await request(app)
       .patch("/api/drafts/55/action")
-      .send({ action: "send" });
+      .send({ action: "edit", editedText: "Operator rewrite" });
 
-    // Exactly one delete for the stale failure entry
     expect(mocks.dbDeleteWheres).toHaveLength(1);
 
-    const activityInserts = mocks.dbInsertValues.filter(
-      (v) =>
-        (v as { type?: string }).type === "draft_sent" ||
-        (v as { type?: string }).type === "draft_send_failed",
+    const editedInserts = mocks.dbInsertValues.filter(
+      (v) => (v as { type?: string }).type === "draft_edited",
     );
+    expect(editedInserts).toHaveLength(1);
+    expect((editedInserts[0] as { draftId?: number }).draftId).toBe(55);
 
-    const sentInserts = activityInserts.filter(
-      (v) => (v as { type?: string }).type === "draft_sent",
-    );
-    expect(sentInserts).toHaveLength(1);
-    expect((sentInserts[0] as { draftId?: number }).draftId).toBe(55);
-
-    const failedInserts = activityInserts.filter(
+    const failedInserts = mocks.dbInsertValues.filter(
       (v) => (v as { type?: string }).type === "draft_send_failed",
     );
     expect(failedInserts).toHaveLength(0);
   });
 
-  it("does NOT delete any activity entry when a plain pending draft is sent (no prior failure)", async () => {
+  it("does NOT delete any activity entry when editing a plain pending draft", async () => {
     mocks.draftRow.status = "pending";
 
     await request(app)
       .patch("/api/drafts/55/action")
-      .send({ action: "send" });
+      .send({ action: "edit", editedText: "Operator rewrite" });
 
     expect(mocks.dbDeleteWheres).toHaveLength(0);
   });

@@ -32,6 +32,12 @@ const mocks = vi.hoisted(() => {
     editedReplyText: null as string | null,
     slackMessageTs: "C_RETRY|1111111111.000001" as string | null,
     actionedAt: null,
+    // Approval columns — written by recordApproval() during the Slack action.
+    approved: false,
+    approvedBy: null as string | null,
+    approvedAt: null as Date | null,
+    approvalSource: null as string | null,
+    approvalRef: null as string | null,
   };
 
   const campaignRow = {
@@ -89,6 +95,8 @@ const mocks = vi.hoisted(() => {
     clientRow,
     activityRows,
     getNextId: () => ++nextId,
+    /** Idempotency claims taken during a test — mirrors the UNIQUE constraint. */
+    claimedKeys: new Set<string>(),
     sendReply: vi.fn<() => Promise<{ ok: boolean; error?: string }>>(),
     verifyIncomingRequest: vi.fn(() => true),
     updateMessageAfterAction: vi.fn(() => Promise.resolve()),
@@ -104,6 +112,7 @@ vi.mock("drizzle-orm", () => ({
   and: vi.fn((...args: unknown[]) => ({ _and: args })),
   desc: vi.fn((_col: unknown) => ({ _desc: _col })),
   gte: vi.fn((_col: unknown, _val: unknown) => ({ _gte_col: _col, _gte_val: _val })),
+  inArray: vi.fn((_col: unknown, vals: unknown[]) => ({ _in: vals })),
 }));
 
 vi.mock("../lib/lemlist", async (importOriginal) => {
@@ -132,6 +141,15 @@ vi.mock("@workspace/db", () => {
   const clientsTable = { _name: "clients" };
   const logsTable = { _name: "logs" };
   const personasTable = { _name: "personas" };
+  const replySendsTable = { _name: "reply_sends", sendKey: {} };
+  const inboundRepliesTable = { _name: "inbound_replies", idempotencyKey: {} };
+
+  /** Emulates INSERT ... ON CONFLICT DO NOTHING RETURNING against a UNIQUE index. */
+  const claim = (key: string) => () => {
+    if (mocks.claimedKeys.has(key)) return Promise.resolve([]);
+    mocks.claimedKeys.add(key);
+    return Promise.resolve([{ id: mocks.claimedKeys.size }]);
+  };
 
   return {
     activityTable,
@@ -140,6 +158,8 @@ vi.mock("@workspace/db", () => {
     clientsTable,
     logsTable,
     personasTable,
+    replySendsTable,
+    inboundRepliesTable,
     db: {
       select: () => ({
         from: (table: object) => ({
@@ -172,12 +192,18 @@ vi.mock("@workspace/db", () => {
             if (table === draftsTable) {
               Object.assign(mocks.draftRow, values);
             }
-            return Promise.resolve(undefined);
+            const p = Promise.resolve(undefined) as Promise<undefined> & { returning?: unknown };
+            p.returning = () => Promise.resolve([{ id: mocks.draftRow.id }]);
+            return p;
           },
         }),
       }),
       insert: (table: object) => ({
         values: (row: Record<string, unknown>) => {
+          if (table === replySendsTable || table === inboundRepliesTable) {
+            const key = String(row.sendKey ?? row.idempotencyKey);
+            return { onConflictDoNothing: () => ({ returning: claim(key) }) };
+          }
           // Persist activity inserts so the feed endpoint can read them back
           if (table === activityTable) {
             mocks.activityRows.push({
@@ -197,6 +223,8 @@ vi.mock("@workspace/db", () => {
       }),
       delete: (table: object) => ({
         where: (condition: unknown) => {
+          // Releasing a send claim frees the key for a genuine operator retry.
+          if (table === replySendsTable) mocks.claimedKeys.clear();
           // Parse the mocked drizzle condition and remove matching rows
           if (table === activityTable) {
             type Condition = { _and: Array<{ _val: unknown }> };
@@ -254,6 +282,12 @@ describe("Activity dashboard — end-to-end retry flow", () => {
     mocks.draftRow.status = "send_failed";
     mocks.draftRow.editedReplyText = null;
     mocks.draftRow.slackMessageTs = "C_RETRY|1111111111.000001";
+    mocks.draftRow.approved = false;
+    mocks.draftRow.approvedBy = null;
+    mocks.draftRow.approvedAt = null;
+    mocks.draftRow.approvalSource = null;
+    mocks.draftRow.approvalRef = null;
+    mocks.claimedKeys.clear();
 
     // Reset the activity table to the initial state:
     //   one stale draft_send_failed for draftId 42, one unrelated draft_created
