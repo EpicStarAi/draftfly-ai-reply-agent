@@ -70,7 +70,29 @@ router.patch("/drafts/:id/action", async (req, res): Promise<void> => {
   }
 
   const { action, editedText } = body.data;
-  const newStatus = action === "send" ? "sent" : action === "edit" ? "edited" : "discarded";
+
+  // ── Approval gate ─────────────────────────────────────────────────────────
+  // This route used to mark a draft "sent" without approval AND without ever
+  // calling Lemlist — a status lie and an approval bypass in one. Dispatching a
+  // reply requires a verified Slack/Telegram approval, which a dashboard
+  // session is not, so "send" is refused here outright.
+  //
+  // "edit" saves text and "discard" is terminal-and-harmless; both stay.
+  if (action === "send") {
+    req.log.warn(
+      { draftId: params.data.id },
+      "REST send rejected — replies may only be dispatched via Slack approval",
+    );
+    res.status(403).json({
+      error:
+        "Sending is only possible by approving the draft in Slack. " +
+        "Use the ✅ Send button on the approval card (or POST /api/drafts/:id/repost if the card is missing).",
+      code: "APPROVAL_REQUIRED",
+    });
+    return;
+  }
+
+  const newStatus = action === "edit" ? "edited" : "discarded";
 
   // Fetch the current draft so we can detect a send_failed → success retry
   const [existingDraft] = await db
@@ -183,9 +205,20 @@ router.post("/drafts/:id/repost", async (req, res): Promise<void> => {
     !!t && t.startsWith("xoxb-") && !t.includes("placeholder");
   const botToken = isRealToken(client.slackBotToken) ? (client.slackBotToken ?? undefined) : undefined;
 
-  // Reset draft to pending (idempotent — safe to call even if already pending)
+  // Reset draft to pending (idempotent — safe to call even if already pending).
+  // Any prior approval is cleared: a reposted card must be approved again, so a
+  // stale approval can never be spent on a fresh send.
   await db.update(draftsTable)
-    .set({ status: "pending", actionedAt: null, slackMessageTs: null })
+    .set({
+      status: "pending",
+      actionedAt: null,
+      slackMessageTs: null,
+      approved: false,
+      approvedBy: null,
+      approvedAt: null,
+      approvalSource: null,
+      approvalRef: null,
+    })
     .where(eq(draftsTable.id, draft.id));
 
   // Post new approval card
