@@ -552,7 +552,18 @@ router.post("/slack/actions", async (req, res): Promise<void> => {
 
       if (channelId && slackTs) {
         void updateMessageAfterAction(channelId, slackTs, "escalated", userId, botToken)
-          .catch((err) => req.log.warn({ err, draftId }, "updateMessageAfterAction failed after escalate"));
+          .catch((err) => {
+            req.log.warn({ err, draftId }, "updateMessageAfterAction failed after escalate — sending fallback DM");
+            void postFallbackFailureNotification({
+              userId,
+              channelId,
+              botToken,
+              draftId,
+              cardUpdateError: err instanceof Error ? err.message : String(err),
+              prospectName: draft.prospectName,
+              prospectEmail: draft.prospectEmail,
+            }).catch((e) => req.log.warn({ e }, "postFallbackFailureNotification also failed"));
+          });
       }
 
       if (channelId) {

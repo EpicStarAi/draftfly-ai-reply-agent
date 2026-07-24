@@ -142,7 +142,7 @@ import app from "../app";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-function blockActionBody(actionId: "draft_send" | "draft_discard" | "draft_edit", draftId = 1) {
+function blockActionBody(actionId: "draft_send" | "draft_discard" | "draft_edit" | "draft_escalate", draftId = 1) {
   const payload = {
     type: "block_actions",
     user: { id: "U_OPERATOR" },
@@ -591,6 +591,30 @@ describe("POST /api/slack/actions — send_failed Slack card update", () => {
             draftId: 1,
             lemlistError: "lead_not_found",
             cardUpdateError: "channel_not_found",
+          }),
+        );
+      },
+      { timeout: 2_000 },
+    );
+  });
+
+  it("sends fallback DM when updateMessageAfterAction rejects after draft_escalate", async () => {
+    mockDraftRow.slackMessageTs = "C_CHANNEL|1234567890.123456";
+    mockUpdateMessageAfterAction.mockRejectedValue(new Error("token_revoked"));
+
+    await request(app)
+      .post("/api/slack/actions")
+      .type("form")
+      .send(blockActionBody("draft_escalate"));
+
+    await vi.waitFor(
+      () => {
+        expect(mockPostFallbackFailureNotification).toHaveBeenCalledWith(
+          expect.objectContaining({
+            userId: "U_OPERATOR",
+            channelId: "C_CHANNEL",
+            draftId: 1,
+            cardUpdateError: "token_revoked",
           }),
         );
       },
