@@ -1,6 +1,13 @@
 import { Badge } from "@/components/ui/badge";
+import { Clock } from "lucide-react";
 
-export function DraftStatusBadge({ status }: { status: "pending" | "sent" | "edited" | "discarded" | "send_failed" }) {
+export function DraftStatusBadge({
+  status,
+  autoFailed,
+}: {
+  status: "pending" | "sent" | "edited" | "discarded" | "send_failed";
+  autoFailed?: boolean;
+}) {
   switch (status) {
     case "pending":
       return <Badge variant="secondary" className="bg-yellow-50 text-yellow-700 border-yellow-200 hover:bg-yellow-50 dark:bg-yellow-900/30 dark:text-yellow-400 dark:border-yellow-900/50">Pending</Badge>;
@@ -11,6 +18,14 @@ export function DraftStatusBadge({ status }: { status: "pending" | "sent" | "edi
     case "discarded":
       return <Badge variant="secondary" className="bg-red-50 text-red-700 border-red-200 hover:bg-red-50 dark:bg-red-900/30 dark:text-red-400 dark:border-red-900/50">Discarded</Badge>;
     case "send_failed":
+      if (autoFailed) {
+        return (
+          <Badge variant="secondary" className="bg-orange-50 text-orange-700 border-orange-200 hover:bg-orange-50 dark:bg-orange-900/30 dark:text-orange-400 dark:border-orange-900/50 gap-1">
+            <Clock className="h-3 w-3" />
+            Timed out — auto-failed
+          </Badge>
+        );
+      }
       return <Badge variant="secondary" className="bg-orange-50 text-orange-700 border-orange-200 hover:bg-orange-50 dark:bg-orange-900/30 dark:text-orange-400 dark:border-orange-900/50">Send Failed</Badge>;
     default:
       return <Badge variant="outline">{status}</Badge>;

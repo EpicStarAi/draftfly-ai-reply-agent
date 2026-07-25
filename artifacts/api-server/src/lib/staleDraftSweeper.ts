@@ -95,9 +95,11 @@ export async function sweepStaleDrafts(): Promise<void> {
 
       // Move to send_failed — use a conditional update so a concurrent action
       // that raced us to a terminal state is not overwritten.
+      // sweeperAlertedAt is set here (not just in the Slack-alert block below) so
+      // the UI can always distinguish a sweeper auto-fail from a manual send failure.
       const updated = await db
         .update(draftsTable)
-        .set({ status: "send_failed", actionedAt: new Date() })
+        .set({ status: "send_failed", actionedAt: new Date(), sweeperAlertedAt: new Date() })
         .where(and(eq(draftsTable.id, draft.id), eq(draftsTable.status, "pending")))
         .returning({ id: draftsTable.id });
 
@@ -180,11 +182,9 @@ export async function sweepStaleDrafts(): Promise<void> {
               ],
             });
 
-            // Stamp the draft so subsequent sweep runs skip the alert for this draft.
-            await db
-              .update(draftsTable)
-              .set({ sweeperAlertedAt: new Date() })
-              .where(eq(draftsTable.id, draft.id));
+            // sweeperAlertedAt is already set above; this is a no-op but kept for clarity.
+            // (Previously this was the only place it was stamped; it now serves as a
+            //  dedup guard for the Slack alert specifically, not for the auto-fail detection.)
           } catch (err) {
             logger.warn({ err, draftId: draft.id }, "staleDraftSweeper: failed to post alert to SLACK_ALERT_CHANNEL");
           }

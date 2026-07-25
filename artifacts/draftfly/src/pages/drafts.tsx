@@ -6,10 +6,11 @@ import { Link, useSearch } from "wouter";
 import { DraftStatusBadge } from "@/components/status-badges";
 import { useState } from "react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Check, X, Clock, Mail } from "lucide-react";
+import { Check, X, Clock, Mail, RefreshCw } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 const VALID_STATUSES = new Set(["pending", "sent", "edited", "discarded", "send_failed"]);
+const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
 function getInitialStatus(search: string): string {
   const params = new URLSearchParams(search);
@@ -21,12 +22,13 @@ export default function DraftsPage() {
   const search = useSearch();
   const [statusFilter, setStatusFilter] = useState<string>(() => getInitialStatus(search));
   const [clientFilter, setClientFilter] = useState<string>("all");
+  const [retryingId, setRetryingId] = useState<number | null>(null);
   
   const queryParams: any = {};
   if (statusFilter !== "all") queryParams.status = statusFilter;
   if (clientFilter !== "all") queryParams.clientId = parseInt(clientFilter, 10);
 
-  const { data: drafts, isLoading } = useListDrafts(queryParams);
+  const { data: drafts, isLoading, refetch } = useListDrafts(queryParams);
   const { data: clients } = useListClients();
   const applyAction = useApplyDraftAction();
   const queryClient = useQueryClient();
@@ -39,6 +41,25 @@ export default function DraftsPage() {
         toast({ title: `Draft ${action === 'send' ? 'sent' : 'discarded'}` });
       }
     });
+  };
+
+  const handleRetry = async (id: number) => {
+    setRetryingId(id);
+    try {
+      const res = await fetch(`${BASE}/api/drafts/${id}/repost`, { method: "POST" });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        toast({ title: "Retry failed", description: (body as any).error ?? `HTTP ${res.status}`, variant: "destructive" });
+      } else {
+        toast({ title: "Draft requeued", description: "A fresh Slack approval card has been posted." });
+        queryClient.invalidateQueries({ queryKey: getListDraftsQueryKey(queryParams) });
+        refetch();
+      }
+    } catch {
+      toast({ title: "Retry failed", description: "Network error — please try again.", variant: "destructive" });
+    } finally {
+      setRetryingId(null);
+    }
   };
 
   return (
@@ -83,58 +104,77 @@ export default function DraftsPage() {
             <p>Inbox zero. No drafts match your filters.</p>
           </div>
         ) : (
-          drafts?.map(draft => (
-            <Card key={draft.id} className={`overflow-hidden transition-all ${draft.status === 'pending' ? 'border-primary/30 shadow-sm' : 'opacity-80'}`}>
-              <CardContent className="p-0">
-                <div className="flex flex-col md:flex-row">
-                  <div className="flex-1 p-5">
-                    <div className="flex justify-between items-start mb-2">
-                      <div className="flex items-center gap-2">
-                        <span className="font-semibold text-base">{draft.prospectName}</span>
-                        <span className="text-sm text-muted-foreground">{draft.prospectCompany}</span>
-                        <span className="text-xs text-muted-foreground px-2 py-0.5 bg-muted rounded-full ml-2 font-mono">
-                          {clients?.find(c => c.id === draft.clientId)?.name}
-                        </span>
+          drafts?.map(draft => {
+            const isAutoFailed = !!draft.sweeperAlertedAt;
+            const isSendFailed = draft.status === "send_failed";
+            return (
+              <Card key={draft.id} className={`overflow-hidden transition-all ${draft.status === 'pending' ? 'border-primary/30 shadow-sm' : isSendFailed ? 'border-orange-300/50 dark:border-orange-800/50' : 'opacity-80'}`}>
+                <CardContent className="p-0">
+                  <div className="flex flex-col md:flex-row">
+                    <div className="flex-1 p-5">
+                      <div className="flex justify-between items-start mb-2">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-semibold text-base">{draft.prospectName}</span>
+                          <span className="text-sm text-muted-foreground">{draft.prospectCompany}</span>
+                          <span className="text-xs text-muted-foreground px-2 py-0.5 bg-muted rounded-full ml-2 font-mono">
+                            {clients?.find(c => c.id === draft.clientId)?.name}
+                          </span>
+                        </div>
+                        <DraftStatusBadge status={draft.status as any} autoFailed={isAutoFailed} />
                       </div>
-                      <DraftStatusBadge status={draft.status as any} />
+                      
+                      <div className="mt-3 text-sm">
+                        <div className="text-xs font-medium text-muted-foreground mb-1 uppercase tracking-wider">AI Suggested Reply</div>
+                        <div className="p-3 bg-muted/40 border rounded-md whitespace-pre-wrap font-sans text-foreground">
+                          {draft.editedReplyText || draft.replyText}
+                        </div>
+                      </div>
                     </div>
                     
-                    <div className="mt-3 text-sm">
-                      <div className="text-xs font-medium text-muted-foreground mb-1 uppercase tracking-wider">AI Suggested Reply</div>
-                      <div className="p-3 bg-muted/40 border rounded-md whitespace-pre-wrap font-sans text-foreground">
-                        {draft.editedReplyText || draft.replyText}
+                    <div className="md:w-[220px] p-5 md:border-l flex flex-col justify-center gap-2 bg-muted/10">
+                      <div className="text-xs text-muted-foreground mb-2 flex items-center justify-center gap-1">
+                        <Clock className="h-3 w-3" />
+                        {new Date(draft.createdAt).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
                       </div>
+                      
+                      {draft.status === "pending" ? (
+                        <>
+                          <Button className="w-full justify-center" onClick={() => handleAction(draft.id, "send")} disabled={applyAction.isPending}>
+                            <Check className="h-4 w-4 mr-2" /> Send
+                          </Button>
+                          <Button variant="outline" className="w-full justify-center" asChild>
+                            <Link href={`/drafts/${draft.id}`}>Edit</Link>
+                          </Button>
+                          <Button variant="ghost" className="w-full justify-center text-destructive hover:bg-destructive/10" onClick={() => handleAction(draft.id, "discard")} disabled={applyAction.isPending}>
+                            <X className="h-4 w-4 mr-2" /> Discard
+                          </Button>
+                        </>
+                      ) : isSendFailed ? (
+                        <>
+                          <Button
+                            className="w-full justify-center"
+                            variant="outline"
+                            onClick={() => handleRetry(draft.id)}
+                            disabled={retryingId === draft.id}
+                          >
+                            <RefreshCw className={`h-4 w-4 mr-2 ${retryingId === draft.id ? "animate-spin" : ""}`} />
+                            {retryingId === draft.id ? "Retrying…" : "Retry"}
+                          </Button>
+                          <Button variant="ghost" className="w-full" asChild>
+                            <Link href={`/drafts/${draft.id}`}>View Details</Link>
+                          </Button>
+                        </>
+                      ) : (
+                        <Button variant="outline" className="w-full" asChild>
+                          <Link href={`/drafts/${draft.id}`}>View Details</Link>
+                        </Button>
+                      )}
                     </div>
                   </div>
-                  
-                  <div className="md:w-[220px] p-5 md:border-l flex flex-col justify-center gap-2 bg-muted/10">
-                    <div className="text-xs text-muted-foreground mb-2 flex items-center justify-center gap-1">
-                      <Clock className="h-3 w-3" />
-                      {new Date(draft.createdAt).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                    </div>
-                    
-                    {draft.status === "pending" ? (
-                      <>
-                        <Button className="w-full justify-center" onClick={() => handleAction(draft.id, "send")} disabled={applyAction.isPending}>
-                          <Check className="h-4 w-4 mr-2" /> Send
-                        </Button>
-                        <Button variant="outline" className="w-full justify-center" asChild>
-                          <Link href={`/drafts/${draft.id}`}>Edit</Link>
-                        </Button>
-                        <Button variant="ghost" className="w-full justify-center text-destructive hover:bg-destructive/10" onClick={() => handleAction(draft.id, "discard")} disabled={applyAction.isPending}>
-                          <X className="h-4 w-4 mr-2" /> Discard
-                        </Button>
-                      </>
-                    ) : (
-                      <Button variant="outline" className="w-full" asChild>
-                        <Link href={`/drafts/${draft.id}`}>View Details</Link>
-                      </Button>
-                    )}
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))
+                </CardContent>
+              </Card>
+            );
+          })
         )}
       </div>
     </div>

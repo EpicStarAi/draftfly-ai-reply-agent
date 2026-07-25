@@ -54,7 +54,13 @@ router.get("/dashboard/activity", async (req, res): Promise<void> => {
     return;
   }
   const limit = query.data.limit ?? 20;
-  const activity = await db.select().from(activityTable).orderBy(desc(activityTable.createdAt)).limit(limit);
+  const conditions = [];
+  if (query.data.draftId !== undefined) {
+    conditions.push(eq(activityTable.draftId, query.data.draftId));
+  }
+  const activity = conditions.length > 0
+    ? await db.select().from(activityTable).where(and(...conditions)).orderBy(desc(activityTable.createdAt)).limit(limit)
+    : await db.select().from(activityTable).orderBy(desc(activityTable.createdAt)).limit(limit);
   res.json(ListActivityResponse.parse(activity));
 });
 

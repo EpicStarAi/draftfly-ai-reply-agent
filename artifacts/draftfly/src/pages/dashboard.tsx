@@ -1,4 +1,5 @@
-import { useGetDashboardStats, useListPendingDrafts, useListActivity, useListClients, useListCampaigns, useGetReplyTrends } from "@workspace/api-client-react";
+import { useGetDashboardStats, useListPendingDrafts, useListDrafts, useListActivity, useListClients, useListCampaigns, useGetReplyTrends, getListDraftsQueryKey } from "@workspace/api-client-react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -25,7 +26,10 @@ import {
   TriangleAlert,
   AlertCircle,
   X,
+  RefreshCw,
+  Clock,
 } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 import {
   BarChart,
   Bar,
@@ -93,9 +97,32 @@ function useIntegrationStatus() {
 export default function Dashboard() {
   const { data: stats, isLoading: statsLoading } = useGetDashboardStats();
   const { data: pendingDrafts, isLoading: draftsLoading } = useListPendingDrafts();
+  const { data: failedDrafts, isLoading: failedLoading, refetch: refetchFailed } = useListDrafts({ status: "send_failed" });
   const { data: activity, isLoading: activityLoading } = useListActivity({ limit: 10 });
   const { status: integrations, loading: intLoading } = useIntegrationStatus();
   const { data: clients } = useListClients();
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const [retryingId, setRetryingId] = useState<number | null>(null);
+
+  const handleRetry = async (id: number) => {
+    setRetryingId(id);
+    try {
+      const res = await fetch(`${BASE}/api/drafts/${id}/repost`, { method: "POST" });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        toast({ title: "Retry failed", description: (body as any).error ?? `HTTP ${res.status}`, variant: "destructive" });
+      } else {
+        toast({ title: "Draft requeued", description: "A fresh Slack approval card has been posted." });
+        queryClient.invalidateQueries({ queryKey: getListDraftsQueryKey({ status: "send_failed" }) });
+        refetchFailed();
+      }
+    } catch {
+      toast({ title: "Retry failed", description: "Network error — please try again.", variant: "destructive" });
+    } finally {
+      setRetryingId(null);
+    }
+  };
 
   const search = useSearch();
   const [location, navigate] = useLocation();
@@ -409,7 +436,7 @@ export default function Dashboard() {
             </CardContent>
           </Card>
 
-          {/* Requires Action */}
+          {/* Requires Action — Pending */}
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-base font-semibold">Requires Action</CardTitle>
@@ -456,6 +483,78 @@ export default function Dashboard() {
               )}
             </CardContent>
           </Card>
+
+          {/* Failed Drafts — needs retry */}
+          {((failedDrafts?.length ?? 0) > 0 || failedLoading) && (
+            <Card className="border-orange-300/60 dark:border-orange-800/60">
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <CardTitle className="text-base font-semibold flex items-center gap-2 text-orange-700 dark:text-orange-400">
+                  <AlertCircle className="h-4 w-4" />
+                  Failed — Needs Retry
+                  {(failedDrafts?.length ?? 0) > 0 && (
+                    <span className="ml-1 text-xs font-mono bg-orange-100 dark:bg-orange-950/50 text-orange-700 dark:text-orange-400 px-1.5 py-0.5 rounded-full">
+                      {failedDrafts!.length}
+                    </span>
+                  )}
+                </CardTitle>
+                <Button variant="ghost" size="sm" asChild className="text-orange-700 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-950/30">
+                  <Link href="/drafts?status=send_failed">View all</Link>
+                </Button>
+              </CardHeader>
+              <CardContent>
+                {failedLoading ? (
+                  <div className="space-y-3">
+                    {[1, 2].map((i) => (
+                      <div key={i} className="h-14 bg-muted/50 animate-pulse rounded-md" />
+                    ))}
+                  </div>
+                ) : (
+                  <div className="space-y-2.5">
+                    {failedDrafts?.slice(0, 3).map((draft) => {
+                      const isAutoFailed = !!draft.sweeperAlertedAt;
+                      return (
+                        <div
+                          key={draft.id}
+                          className="flex items-center justify-between p-3 border border-orange-200 dark:border-orange-900/50 rounded-md bg-orange-50/50 dark:bg-orange-950/20"
+                        >
+                          <div className="min-w-0 flex-1">
+                            <div className="font-medium text-sm truncate">
+                              {draft.prospectName}{" "}
+                              <span className="text-muted-foreground font-normal">
+                                ({draft.prospectCompany})
+                              </span>
+                            </div>
+                            <div className="text-xs text-orange-600 dark:text-orange-400 mt-0.5 flex items-center gap-1">
+                              {isAutoFailed ? (
+                                <><Clock className="h-3 w-3" /> Timed out — auto-failed by sweeper</>
+                              ) : (
+                                <>Send failed — Slack post error</>
+                              )}
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0 ml-3">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="border-orange-300 dark:border-orange-700 text-orange-700 dark:text-orange-400 hover:bg-orange-100 dark:hover:bg-orange-900/40 h-7 text-xs gap-1"
+                              onClick={() => handleRetry(draft.id)}
+                              disabled={retryingId === draft.id}
+                            >
+                              <RefreshCw className={`h-3 w-3 ${retryingId === draft.id ? "animate-spin" : ""}`} />
+                              {retryingId === draft.id ? "Retrying…" : "Retry"}
+                            </Button>
+                            <Button size="sm" variant="ghost" asChild className="h-7 text-xs">
+                              <Link href={`/drafts/${draft.id}`}>View</Link>
+                            </Button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
         </div>
 
         {/* Right column — Recent Activity */}

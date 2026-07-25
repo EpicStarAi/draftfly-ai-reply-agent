@@ -405,6 +405,7 @@ export const ListDraftsResponseItem = zod.object({
   "status": zod.enum(['pending', 'sent', 'edited', 'discarded', 'send_failed']),
   "slackMessageTs": zod.string().nullish(),
   "actionedAt": zod.coerce.date().nullish(),
+  "sweeperAlertedAt": zod.coerce.date().nullish(),
   "createdAt": zod.coerce.date()
 })
 export const ListDraftsResponse = zod.array(ListDraftsResponseItem)
@@ -428,6 +429,7 @@ export const ListPendingDraftsResponseItem = zod.object({
   "status": zod.enum(['pending', 'sent', 'edited', 'discarded', 'send_failed']),
   "slackMessageTs": zod.string().nullish(),
   "actionedAt": zod.coerce.date().nullish(),
+  "sweeperAlertedAt": zod.coerce.date().nullish(),
   "createdAt": zod.coerce.date()
 })
 export const ListPendingDraftsResponse = zod.array(ListPendingDraftsResponseItem)
@@ -455,6 +457,7 @@ export const GetDraftResponse = zod.object({
   "status": zod.enum(['pending', 'sent', 'edited', 'discarded', 'send_failed']),
   "slackMessageTs": zod.string().nullish(),
   "actionedAt": zod.coerce.date().nullish(),
+  "sweeperAlertedAt": zod.coerce.date().nullish(),
   "createdAt": zod.coerce.date()
 })
 
@@ -486,6 +489,7 @@ export const ApplyDraftActionResponse = zod.object({
   "status": zod.enum(['pending', 'sent', 'edited', 'discarded', 'send_failed']),
   "slackMessageTs": zod.string().nullish(),
   "actionedAt": zod.coerce.date().nullish(),
+  "sweeperAlertedAt": zod.coerce.date().nullish(),
   "createdAt": zod.coerce.date()
 })
 
@@ -606,7 +610,8 @@ export const GetDashboardStatsResponse = zod.object({
 export const listActivityQueryLimitDefault = 20;
 
 export const ListActivityQueryParams = zod.object({
-  "limit": zod.coerce.number().default(listActivityQueryLimitDefault)
+  "limit": zod.coerce.number().default(listActivityQueryLimitDefault),
+  "draftId": zod.coerce.number().optional()
 })
 
 export const ListActivityResponseItem = zod.object({
@@ -615,6 +620,7 @@ export const ListActivityResponseItem = zod.object({
   "description": zod.string(),
   "clientName": zod.string().nullish(),
   "campaignName": zod.string().nullish(),
+  "draftId": zod.number().nullish(),
   "createdAt": zod.coerce.date()
 })
 export const ListActivityResponse = zod.array(ListActivityResponseItem)

@@ -201,6 +201,8 @@ export interface Draft {
   slackMessageTs?: string | null;
   /** @nullable */
   actionedAt?: string | null;
+  /** @nullable — set by the stale-draft sweeper when this draft was auto-failed */
+  sweeperAlertedAt?: string | null;
   createdAt: string;
 }
 
@@ -340,6 +342,8 @@ export interface ActivityItem {
   clientName?: string | null;
   /** @nullable */
   campaignName?: string | null;
+  /** @nullable */
+  draftId?: number | null;
   createdAt: string;
 }
 
@@ -419,6 +423,7 @@ export const ListSetupItemsChecklistType = {
 
 export type ListActivityParams = {
 limit?: number;
+draftId?: number;
 };
 
 export type GetReplyTrendsParams = {
