@@ -19,6 +19,7 @@ export const draftsTable = pgTable("drafts", {
   status: draftStatusEnum("status").notNull().default("pending"),
   slackMessageTs: text("slack_message_ts"),
   actionedAt: timestamp("actioned_at", { withTimezone: true }),
+  sweeperAlertedAt: timestamp("sweeper_alerted_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

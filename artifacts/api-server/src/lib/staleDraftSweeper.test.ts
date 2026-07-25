@@ -65,6 +65,7 @@ const {
     prospectEmail: "lead@example.com",
     prospectName: "Test Lead",
     slackMessageTs: "C123ABC|1700000000.000100",
+    sweeperAlertedAt: null,
     createdAt: new Date(now - 25 * 60 * 60 * 1000),
   };
 
@@ -76,6 +77,7 @@ const {
     prospectEmail: "orphan@example.com",
     prospectName: "Orphan Lead",
     slackMessageTs: null,
+    sweeperAlertedAt: null,
     createdAt: new Date(now - 90 * 60 * 1000),
   };
 
@@ -226,6 +228,22 @@ describe("sweepStaleDrafts", () => {
       const call = mockPostMessage.mock.calls[0]?.[0] as { channel: string; text: string };
       expect(call.channel).toBe("C_ALERTS");
       expect(call.text).toContain(String(staleDraftPosted.id));
+    });
+
+    it("skips Slack alert when sweeperAlertedAt is already set (dedup)", async () => {
+      const { isSlackConfigured } = await import("../lib/slack");
+      vi.mocked(isSlackConfigured).mockReturnValue(true);
+      process.env.SLACK_ALERT_CHANNEL = "C_ALERTS";
+
+      // Simulate a draft that was already alerted in a previous sweep cycle
+      staleDraftsRows = [{ ...staleDraftPosted, sweeperAlertedAt: new Date(Date.now() - 60_000) }];
+
+      await sweepStaleDrafts();
+
+      // Status should still be updated (move to send_failed)
+      expect(mockUpdateReturning).toHaveBeenCalledTimes(1);
+      // But no duplicate Slack alert should be posted
+      expect(mockPostMessage).not.toHaveBeenCalled();
     });
   });
 

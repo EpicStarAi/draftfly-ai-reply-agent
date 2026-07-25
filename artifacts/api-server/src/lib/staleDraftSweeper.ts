@@ -55,6 +55,7 @@ export async function sweepStaleDrafts(): Promise<void> {
       prospectEmail: draftsTable.prospectEmail,
       prospectName: draftsTable.prospectName,
       slackMessageTs: draftsTable.slackMessageTs,
+      sweeperAlertedAt: draftsTable.sweeperAlertedAt,
       createdAt: draftsTable.createdAt,
     })
     .from(draftsTable)
@@ -143,35 +144,50 @@ export async function sweepStaleDrafts(): Promise<void> {
         }
       }
 
-      // Post a summary alert to the optional admin channel
+      // Post a summary alert to the optional admin channel.
+      // Dedup: if we already alerted for this draft in a previous sweep cycle,
+      // skip posting again to prevent alert fatigue.
       const alertChannel = process.env.SLACK_ALERT_CHANNEL;
       if (alertChannel && isSlackConfigured()) {
-        const slackClient = new WebClient(process.env.SLACK_BOT_TOKEN);
-        try {
-          await slackClient.chat.postMessage({
-            channel: alertChannel,
-            text: `⚠️ Stale draft auto-failed: #${draft.id} (${draft.prospectName} / ${draft.prospectEmail})`,
-            blocks: [
-              {
-                type: "section",
-                text: {
-                  type: "mrkdwn",
-                  text: [
-                    `⚠️ *Stale draft automatically moved to \`send_failed\`*`,
-                    `*Draft:* #${draft.id}`,
-                    `*Lead:* ${draft.prospectName} (${draft.prospectEmail})`,
-                    `*Client:* ${client?.name ?? String(draft.clientId)}`,
-                    `*Campaign:* ${campaign?.name ?? String(draft.campaignId)}`,
-                    `*Age:* ${ageMinutes} minutes (threshold: ${thresholdMinutes} min)`,
-                    ``,
-                    `Please review and retry in DraftFly.`,
-                  ].join("\n"),
+        if (draft.sweeperAlertedAt) {
+          logger.debug(
+            { draftId: draft.id, sweeperAlertedAt: draft.sweeperAlertedAt },
+            "staleDraftSweeper: skipping duplicate Slack alert (already alerted)",
+          );
+        } else {
+          const slackClient = new WebClient(process.env.SLACK_BOT_TOKEN);
+          try {
+            await slackClient.chat.postMessage({
+              channel: alertChannel,
+              text: `⚠️ Stale draft auto-failed: #${draft.id} (${draft.prospectName} / ${draft.prospectEmail})`,
+              blocks: [
+                {
+                  type: "section",
+                  text: {
+                    type: "mrkdwn",
+                    text: [
+                      `⚠️ *Stale draft automatically moved to \`send_failed\`*`,
+                      `*Draft:* #${draft.id}`,
+                      `*Lead:* ${draft.prospectName} (${draft.prospectEmail})`,
+                      `*Client:* ${client?.name ?? String(draft.clientId)}`,
+                      `*Campaign:* ${campaign?.name ?? String(draft.campaignId)}`,
+                      `*Age:* ${ageMinutes} minutes (threshold: ${thresholdMinutes} min)`,
+                      ``,
+                      `Please review and retry in DraftFly.`,
+                    ].join("\n"),
+                  },
                 },
-              },
-            ],
-          });
-        } catch (err) {
-          logger.warn({ err, draftId: draft.id }, "staleDraftSweeper: failed to post alert to SLACK_ALERT_CHANNEL");
+              ],
+            });
+
+            // Stamp the draft so subsequent sweep runs skip the alert for this draft.
+            await db
+              .update(draftsTable)
+              .set({ sweeperAlertedAt: new Date() })
+              .where(eq(draftsTable.id, draft.id));
+          } catch (err) {
+            logger.warn({ err, draftId: draft.id }, "staleDraftSweeper: failed to post alert to SLACK_ALERT_CHANNEL");
+          }
         }
       }
     } catch (err) {
