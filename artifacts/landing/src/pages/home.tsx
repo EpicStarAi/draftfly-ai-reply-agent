@@ -12,7 +12,6 @@ import {
 } from "@/components/ui/accordion";
 import { Sun, Moon } from "lucide-react";
 import { useTheme } from "@/hooks/use-theme";
-import { useLang } from "@/hooks/use-lang";
 
 const DASHBOARD_URL = "https://sales-reply-ai.replit.app/app";
 
@@ -64,7 +63,7 @@ const DEMO_STEPS = [
     bg: "bg-yellow-400/10 border-yellow-400/20",
     content: (
       <div className="space-y-3">
-        <div className="text-xs text-muted-foreground font-mono mb-4">Claude 3.5 Sonnet — context loading</div>
+        <div className="text-xs text-muted-foreground font-mono mb-4">AI model — context loading</div>
         <div className="space-y-2">
           {[
             { label: "Persona", value: "Enterprise CTO — Acme Corp", done: true },
@@ -262,7 +261,6 @@ export default function Home() {
   const [name, setName] = useState("");
   const [submitted, setSubmitted] = useState(false);
   const { theme, setTheme } = useTheme();
-  const { lang, setLang, tr } = useLang();
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -305,26 +303,11 @@ export default function Home() {
                 <Moon className="h-3.5 w-3.5" />
               </button>
             </div>
-            {/* Language toggle */}
-            <div className="hidden sm:flex items-center bg-white/5 border border-white/10 rounded-lg p-0.5">
-              <button
-                onClick={() => setLang("en")}
-                className={`px-2 py-1 rounded text-xs font-medium transition-all ${lang === "en" ? "bg-white/20 text-foreground" : "text-muted-foreground hover:text-foreground"}`}
-              >
-                EN
-              </button>
-              <button
-                onClick={() => setLang("ru")}
-                className={`px-2 py-1 rounded text-xs font-medium transition-all ${lang === "ru" ? "bg-white/20 text-foreground" : "text-muted-foreground hover:text-foreground"}`}
-              >
-                RU
-              </button>
-            </div>
             <button
               onClick={() => document.getElementById("pricing")?.scrollIntoView({ behavior: "smooth" })}
               className="text-sm text-muted-foreground hover:text-foreground transition-colors hidden sm:block"
             >
-              {tr.pricing}
+              Pricing
             </button>
             <a
               href={DASHBOARD_URL}
@@ -332,13 +315,13 @@ export default function Home() {
               rel="noopener noreferrer"
               className="text-sm text-muted-foreground hover:text-foreground transition-colors hidden sm:block"
             >
-              {tr.signIn}
+              Sign in
             </a>
             <Button
               size="sm"
               onClick={() => document.getElementById("early-access")?.scrollIntoView({ behavior: "smooth" })}
             >
-              {tr.requestAccess}
+              Request Access
             </Button>
           </div>
         </div>
@@ -372,7 +355,7 @@ export default function Home() {
                 variants={fadeIn}
                 className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto mb-10 leading-relaxed"
               >
-                You send cold emails via Lemlist. A prospect replies. DraftFly instantly drafts the perfect response with Claude AI and sends it to your Slack for one-click approval — before you even open your inbox.
+                Get on-brand replies for your campaigns drafted and waiting for you before you've even seen the prospect's email — powered by AI, approved in one click.
               </motion.p>
 
               <motion.div
@@ -425,7 +408,7 @@ export default function Home() {
                 </div>
                 <div className="flex items-start gap-4 mb-4">
                   <span className="text-blue-400 shrink-0">14:02:12</span>
-                  <span className="text-white/80">Claude 3.5 Sonnet drafting response based on <span className="text-yellow-400">Acme_Corp_Persona</span> context...</span>
+                  <span className="text-white/80">AI drafting response based on <span className="text-yellow-400">Acme_Corp_Persona</span> context...</span>
                 </div>
                 <div className="flex items-start gap-4 mb-4">
                   <span className="text-blue-400 shrink-0">14:02:14</span>
@@ -465,7 +448,7 @@ export default function Home() {
             <div className="grid md:grid-cols-4 gap-8">
               {[
                 { icon: MessageSquare, title: "1. Intercept", desc: "Monitors your sending domains and pulls positive or interrogative replies instantly." },
-                { icon: Zap, title: "2. Draft", desc: "Uses Claude to generate highly contextual, persona-matched responses in seconds." },
+                { icon: Zap, title: "2. Draft", desc: "Uses AI to generate highly contextual, persona-matched responses in seconds." },
                 { icon: Slack, title: "3. Route", desc: "Pushes the draft, context, and original thread into a dedicated Slack channel." },
                 { icon: CheckCircle, title: "4. Approve", desc: "One click in Slack to approve and send, or drop into the web app to edit." },
               ].map((step, i) => (
@@ -571,7 +554,7 @@ export default function Home() {
               {[
                 { metric: "4x", label: "Faster response times", desc: "SDRs approve drafts in seconds instead of writing from scratch." },
                 { metric: "100%", label: "Visibility", desc: "No more black-box inboxes. Every reply is tracked in Slack." },
-                { metric: "0", label: "Context lost", desc: "Claude retains full thread history and persona data for every reply." },
+                { metric: "0", label: "Context lost", desc: "AI retains full thread history and persona data for every reply." },
               ].map((stat, i) => (
                 <motion.div
                   key={i}
@@ -614,7 +597,7 @@ export default function Home() {
                   name: "Starter",
                   price: "$49",
                   desc: "For solo operators and small teams getting started with AI-assisted replies.",
-                  features: ["1 Lemlist account", "Up to 500 replies / mo", "1 Slack channel", "Claude AI drafting", "Email support"],
+                  features: ["1 Lemlist account", "Up to 500 replies / mo", "1 Slack channel", "AI drafting", "Email support"],
                   cta: "Get Early Access",
                   highlight: false,
                 },
@@ -727,7 +710,7 @@ export default function Home() {
                 {[
                   {
                     q: "What does DraftFly actually do?",
-                    a: "DraftFly connects your inbox, AI drafting engine, and Slack approvals into one deterministic workflow. When a reply comes in, our backend detects it, generates a contextual draft using Claude, and routes it to the right Slack channel for human approval — before anything is sent.",
+                    a: "DraftFly connects your inbox, AI drafting engine, and Slack approvals into one deterministic workflow. When a reply comes in, our backend detects it, generates a contextual draft using AI, and routes it to the right Slack channel for human approval — before anything is sent.",
                   },
                   {
                     q: "Does it replace my SDRs?",
@@ -739,7 +722,7 @@ export default function Home() {
                   },
                   {
                     q: "How does the AI know what to write?",
-                    a: "DraftFly uses Persona profiles — per-campaign instructions that tell Claude the prospect's role, pain points, tone expectations, and deal context. The model also loads the full email thread before drafting, so replies are always contextually grounded.",
+                    a: "DraftFly uses Persona profiles — per-campaign instructions that tell the AI the prospect's role, pain points, tone expectations, and deal context. The model also loads the full email thread before drafting, so replies are always contextually grounded.",
                   },
                   {
                     q: "What is DraftFly's API?",
