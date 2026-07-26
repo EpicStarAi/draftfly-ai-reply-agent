@@ -3,48 +3,8 @@ import { useEffect, useRef } from "react";
 
 type Pt = [number, number];
 
-// Cubic bezier point
-const bez = (p0: Pt, p1: Pt, p2: Pt, p3: Pt, s: number): Pt => {
-  const mt = 1 - s;
-  return [
-    mt*mt*mt*p0[0] + 3*mt*mt*s*p1[0] + 3*mt*s*s*p2[0] + s*s*s*p3[0],
-    mt*mt*mt*p0[1] + 3*mt*mt*s*p1[1] + 3*mt*s*s*p2[1] + s*s*s*p3[1],
-  ];
-};
-
-// Build ribbon outline (upper/lower edges) along a bezier spine
-const buildRibbon = (
-  p0: Pt, p1: Pt, p2: Pt, p3: Pt,
-  maxW: number, segs = 70
-): [Pt[], Pt[]] => {
-  const upper: Pt[] = [], lower: Pt[] = [];
-  const eps = 0.003;
-  for (let i = 0; i <= segs; i++) {
-    const s  = i / segs;
-    const [x, y]   = bez(p0, p1, p2, p3, s);
-    const [nx, ny] = bez(p0, p1, p2, p3, Math.min(s + eps, 1));
-    const dx = nx - x, dy = ny - y;
-    const len = Math.hypot(dx, dy) || 1;
-    const px = -dy / len, py = dx / len;           // perpendicular
-    // Bell width — taper to 0 at both ends, peak in middle
-    const w = maxW * Math.pow(Math.sin(s * Math.PI), 0.7);
-    upper.push([x + px * w, y + py * w]);
-    lower.push([x - px * w, y - py * w]);
-  }
-  return [upper, lower];
-};
-
-// Trace a ribbon outline as a closed canvas path
-const tracePath = (ctx: CanvasRenderingContext2D, upper: Pt[], lower: Pt[]) => {
-  ctx.beginPath();
-  ctx.moveTo(upper[0][0], upper[0][1]);
-  for (const p of upper) ctx.lineTo(p[0], p[1]);
-  for (let i = lower.length - 1; i >= 0; i--) ctx.lineTo(lower[i][0], lower[i][1]);
-  ctx.closePath();
-};
-
 function GlowCanvas() {
-  const ref    = useRef<HTMLCanvasElement>(null);
+  const ref     = useRef<HTMLCanvasElement>(null);
   const animRef = useRef<number>(0);
 
   useEffect(() => {
@@ -58,49 +18,46 @@ function GlowCanvas() {
       canvas.height = canvas.offsetHeight;
     };
 
-    // Draw one ribbon: outer diffuse glow + narrow bright core
-    const ribbon = (
-      p0: Pt, p1: Pt, p2: Pt, p3: Pt,
-      maxW: number,
-      coreColor: string,   // rgba for the bright spine
-      glowColor: string,   // rgba for the outer haze
-      alpha = 1,
-      blurOuter = 28,
-      blurCore  = 7
+    // Draw a closed Catmull-Rom smooth path through pts, then
+    // fill with an off-center radial gradient and blur.
+    const filledShape = (
+      pts: Pt[],
+      gradX: number, gradY: number, gradR: number,   // gradient hot-spot
+      c0: string, c1: string, c2: string,            // inner → mid → outer
+      blurPx: number,
+      alpha: number
     ) => {
-      const [upper, lower] = buildRibbon(p0, p1, p2, p3, maxW);
-
-      // ── Outer glow (wide + heavily blurred) ──
-      ctx.save();
-      ctx.globalAlpha = alpha * 0.55;
-      ctx.filter = `blur(${blurOuter}px)`;
-      tracePath(ctx, upper, lower);
-      ctx.fillStyle = glowColor;
-      ctx.fill();
-      ctx.restore();
-
-      // ── Mid haze (medium blur) ──
-      ctx.save();
-      ctx.globalAlpha = alpha * 0.7;
-      ctx.filter = `blur(${blurCore * 2}px)`;
-      const [u2, l2] = buildRibbon(p0, p1, p2, p3, maxW * 0.55);
-      tracePath(ctx, u2, l2);
-      ctx.fillStyle = coreColor;
-      ctx.fill();
-      ctx.restore();
-
-      // ── Bright core (narrow + sharp) ──
       ctx.save();
       ctx.globalAlpha = alpha;
-      ctx.filter = `blur(${blurCore}px)`;
-      const [u3, l3] = buildRibbon(p0, p1, p2, p3, maxW * 0.22);
-      tracePath(ctx, u3, l3);
-      ctx.fillStyle = coreColor;
+      ctx.filter = `blur(${blurPx}px)`;
+
+      const n = pts.length;
+      ctx.beginPath();
+      for (let i = 0; i < n; i++) {
+        const p0 = pts[(i - 1 + n) % n];
+        const p1 = pts[i];
+        const p2 = pts[(i + 1) % n];
+        const p3 = pts[(i + 2) % n];
+        const cp1x = p1[0] + (p2[0] - p0[0]) / 5;
+        const cp1y = p1[1] + (p2[1] - p0[1]) / 5;
+        const cp2x = p2[0] - (p3[0] - p1[0]) / 5;
+        const cp2y = p2[1] - (p3[1] - p1[1]) / 5;
+        if (i === 0) ctx.moveTo(p1[0], p1[1]);
+        ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, p2[0], p2[1]);
+      }
+      ctx.closePath();
+
+      const g = ctx.createRadialGradient(gradX, gradY, 0, gradX, gradY, gradR);
+      g.addColorStop(0,    c0);
+      g.addColorStop(0.40, c1);
+      g.addColorStop(0.80, c2);
+      g.addColorStop(1,    "rgba(0,0,0,0)");
+      ctx.fillStyle = g;
       ctx.fill();
       ctx.restore();
     };
 
-    // Smooth oscillators
+    // Gentle oscillators for slow organic drift
     const s = (a: number, f: number, ph = 0) => Math.sin(t * f + ph) * a;
     const c = (a: number, f: number, ph = 0) => Math.cos(t * f + ph) * a;
 
@@ -109,91 +66,85 @@ function GlowCanvas() {
       ctx.clearRect(0, 0, W, H);
       ctx.filter = "none";
 
-      // ── Deep background radial (keeps the dark blue atmosphere) ──
-      ctx.save();
-      ctx.filter = "blur(70px)";
-      ctx.globalAlpha = 0.85;
-      const bg = ctx.createRadialGradient(W*0.48, H*0.38, 0, W*0.48, H*0.38, W*0.6);
-      bg.addColorStop(0,   "rgba(6, 22, 100, 0.9)");
-      bg.addColorStop(0.5, "rgba(3, 10,  60, 0.5)");
-      bg.addColorStop(1,   "rgba(0,  0,   0, 0)");
-      ctx.fillStyle = bg;
-      ctx.fillRect(0, 0, W, H);
-      ctx.restore();
-
-      // ── Ribbon 1 — large sweeping teal arc (slow, dominant) ──
-      ribbon(
-        [W*(0.05 + s(0.04, 0.14)),    H*(1.05 + c(0.03, 0.10))],
-        [W*(0.55 + s(0.06, 0.18)),    H*(0.08 + c(0.05, 0.15))],
-        [W*(0.38 + c(0.05, 0.22)),    H*(0.62 + s(0.04, 0.20))],
-        [W*(0.92 + c(0.03, 0.16)),    H*(0.28 + s(0.05, 0.12))],
-        W * 0.13,
-        "rgba(0, 215, 200, 0.9)",
-        "rgba(0, 100, 160, 0.55)",
-        0.88, 32, 8
+      // ── Shape 1 — LARGE dominant teal/cyan mass (right-center dominant) ──
+      // This is the big volumetric form filling ~60% of the hero, like in the reference.
+      // Outline traces a large irregular wing/crescent anchored to the right side.
+      filledShape(
+        [
+          [W*(0.90+s(0.02,0.10)),  H*(0.00+c(0.03,0.08))],  // top-right
+          [W*(1.05+s(0.02,0.12)),  H*(0.30+c(0.03,0.11))],  // far right
+          [W*(0.95+c(0.02,0.09)),  H*(0.65+s(0.03,0.13))],  // right-lower
+          [W*(0.70+s(0.03,0.14)),  H*(0.85+c(0.02,0.10))],  // lower
+          [W*(0.40+c(0.03,0.11)),  H*(0.78+s(0.03,0.09))],  // lower-left
+          [W*(0.18+s(0.02,0.13)),  H*(0.58+c(0.03,0.12))],  // left waist (the "neck")
+          [W*(0.28+c(0.03,0.10)),  H*(0.28+s(0.02,0.08))],  // upper-left
+          [W*(0.55+s(0.02,0.09)),  H*(0.05+c(0.03,0.11))],  // top-center
+        ],
+        W*0.62, H*0.22,   // hot-spot upper-right area
+        W*0.65,           // gradient radius
+        "rgba(0,225,210,0.95)",   // bright cyan core
+        "rgba(0,130,175,0.55)",   // teal mid
+        "rgba(0,40,120,0.15)",    // deep blue edge
+        45, 0.85
       );
 
-      // ── Ribbon 2 — deep blue background sweep (wide, hazy) ──
-      ribbon(
-        [W*(-0.05 + c(0.03, 0.11)),   H*(0.55 + s(0.05, 0.09))],
-        [W*(0.48  + s(0.07, 0.15)),   H*(0.10 + c(0.06, 0.13))],
-        [W*(0.52  + c(0.05, 0.20)),   H*(0.78 + s(0.04, 0.17))],
-        [W*(1.08  + s(0.03, 0.13)),   H*(0.42 + c(0.04, 0.11))],
-        W * 0.20,
-        "rgba(15, 80, 230, 0.75)",
-        "rgba(5,  28, 120, 0.45)",
-        0.72, 40, 12
+      // ── Shape 2 — deeper blue underlayer (behind shape 1, sets the atmosphere) ──
+      filledShape(
+        [
+          [W*(0.80+c(0.03,0.07)),  H*(-0.05+s(0.02,0.06))],
+          [W*(1.10+s(0.02,0.08)),  H*(0.45+c(0.03,0.07))],
+          [W*(0.85+c(0.02,0.09)),  H*(0.95+s(0.02,0.08))],
+          [W*(0.45+s(0.03,0.07)),  H*(1.00+c(0.02,0.09))],
+          [W*(0.10+c(0.02,0.08)),  H*(0.70+s(0.03,0.07))],
+          [W*(0.05+s(0.02,0.09)),  H*(0.30+c(0.02,0.08))],
+          [W*(0.30+c(0.03,0.07)),  H*(0.05+s(0.02,0.06))],
+        ],
+        W*0.68, H*0.30,
+        W*0.80,
+        "rgba(10,80,210,0.80)",
+        "rgba(5,40,130,0.45)",
+        "rgba(2,15,70,0.12)",
+        60, 0.80
       );
 
-      // ── Ribbon 3 — cyan flame tendril (curls up, medium) ──
-      ribbon(
-        [W*(0.42 + s(0.03, 0.30)),    H*(1.02)],
-        [W*(0.28 + c(0.06, 0.25)),    H*(0.52 + s(0.05, 0.23))],
-        [W*(0.68 + s(0.05, 0.33)),    H*(0.22 + c(0.06, 0.28))],
-        [W*(0.52 + c(0.04, 0.37)),    H*(-0.04)],
-        W * 0.072,
-        "rgba(70, 235, 225, 0.95)",
-        "rgba(0, 160, 180, 0.5)",
-        0.92, 22, 6
+      // ── Shape 3 — secondary teal "wing" (upper left, like in thumbnail 1) ──
+      filledShape(
+        [
+          [W*(0.05+s(0.02,0.16)),  H*(0.05+c(0.03,0.14))],
+          [W*(0.38+c(0.03,0.18)),  H*(0.00+s(0.02,0.15))],
+          [W*(0.50+s(0.02,0.17)),  H*(0.22+c(0.03,0.16))],
+          [W*(0.35+c(0.02,0.19)),  H*(0.45+s(0.03,0.17))],
+          [W*(0.10+s(0.03,0.16)),  H*(0.42+c(0.02,0.15))],
+          [W*(-0.05+c(0.02,0.18)), H*(0.22+s(0.03,0.14))],
+        ],
+        W*0.28, H*0.16,
+        W*0.36,
+        "rgba(0,210,200,0.85)",
+        "rgba(0,110,170,0.40)",
+        "rgba(0,30,100,0.08)",
+        38, 0.70
       );
 
-      // ── Ribbon 4 — rightward teal arc ──
-      ribbon(
-        [W*(0.68 + c(0.04, 0.21)),    H*(1.02)],
-        [W*(0.98 + s(0.03, 0.18)),    H*(0.48 + c(0.05, 0.16))],
-        [W*(0.52 + c(0.05, 0.24)),    H*(0.18 + s(0.04, 0.21))],
-        [W*(0.78 + s(0.04, 0.27)),    H*(-0.04)],
-        W * 0.058,
-        "rgba(30, 225, 215, 0.85)",
-        "rgba(0, 120, 150, 0.38)",
-        0.72, 20, 6
+      // ── Shape 4 — bright hot-spot accent (the "fold" highlight seen in reference) ──
+      // This is the very bright concentrated teal that makes it look lit from within.
+      filledShape(
+        [
+          [W*(0.48+s(0.02,0.22)),  H*(0.08+c(0.02,0.20))],
+          [W*(0.68+c(0.02,0.24)),  H*(0.12+s(0.02,0.21))],
+          [W*(0.72+s(0.02,0.23)),  H*(0.35+c(0.02,0.22))],
+          [W*(0.58+c(0.02,0.24)),  H*(0.42+s(0.02,0.20))],
+          [W*(0.40+s(0.02,0.22)),  H*(0.35+c(0.02,0.23))],
+          [W*(0.38+c(0.02,0.21)),  H*(0.15+s(0.02,0.22))],
+        ],
+        W*0.57, H*0.22,
+        W*0.22,
+        "rgba(160,255,248,0.95)",  // almost white-cyan at core
+        "rgba(0,210,200,0.50)",
+        "rgba(0,100,160,0.10)",
+        22, 0.80
       );
 
-      // ── Ribbon 5 — diagonal cross-sweep (bottom-right to top-left) ──
-      ribbon(
-        [W*(0.95 + s(0.03, 0.19)),    H*(0.85 + c(0.04, 0.16))],
-        [W*(0.6  + c(0.05, 0.23)),    H*(0.55 + s(0.05, 0.20))],
-        [W*(0.42 + s(0.04, 0.27)),    H*(0.28 + c(0.04, 0.24))],
-        [W*(0.1  + c(0.03, 0.31)),    H*(-0.02)],
-        W * 0.048,
-        "rgba(0, 200, 220, 0.8)",
-        "rgba(0,  80, 140, 0.35)",
-        0.65, 18, 5
-      );
-
-      // ── Ribbon 6 — hot white-cyan highlight (thin, fast) ──
-      ribbon(
-        [W*(0.38 + c(0.02, 0.44)),    H*(0.78 + s(0.03, 0.39))],
-        [W*(0.50 + s(0.04, 0.37)),    H*(0.42 + c(0.04, 0.33))],
-        [W*(0.44 + c(0.03, 0.41)),    H*(0.18 + s(0.03, 0.37))],
-        [W*(0.58 + s(0.02, 0.47)),    H*(0.02)],
-        W * 0.026,
-        "rgba(210, 255, 252, 0.98)",
-        "rgba( 80, 215, 225, 0.45)",
-        0.9, 12, 4
-      );
-
-      t += 0.004;
+      t += 0.003;
       animRef.current = requestAnimationFrame(draw);
     };
 
