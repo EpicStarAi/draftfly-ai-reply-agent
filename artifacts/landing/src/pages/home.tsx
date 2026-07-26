@@ -333,14 +333,6 @@ export default function Home() {
           <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-primary/10 via-background to-background pointer-events-none" />
           <div className="container mx-auto text-center max-w-4xl relative z-10">
             <motion.div initial="hidden" animate="visible" variants={stagger}>
-              <motion.div
-                variants={fadeIn}
-                className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/5 border border-white/10 text-xs font-medium text-muted-foreground mb-8"
-              >
-                <span className="flex h-2 w-2 rounded-full bg-primary animate-pulse" />
-                DraftFly is in private beta
-              </motion.div>
-
               <motion.h1
                 variants={fadeIn}
                 className="text-5xl md:text-7xl font-bold tracking-tight text-foreground leading-[1.1] mb-6"
