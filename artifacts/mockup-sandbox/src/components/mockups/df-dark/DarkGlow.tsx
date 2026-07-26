@@ -1,8 +1,6 @@
 import "./dark.css";
 import { useEffect, useRef } from "react";
 
-type Pt = [number, number];
-
 function GlowCanvas() {
   const ref     = useRef<HTMLCanvasElement>(null);
   const animRef = useRef<number>(0);
@@ -18,46 +16,25 @@ function GlowCanvas() {
       canvas.height = canvas.offsetHeight;
     };
 
-    // Draw a closed Catmull-Rom smooth path through pts, then
-    // fill with an off-center radial gradient and blur.
-    const filledShape = (
-      pts: Pt[],
-      gradX: number, gradY: number, gradR: number,   // gradient hot-spot
-      c0: string, c1: string, c2: string,            // inner → mid → outer
+    // Single radial gradient drawn over the full canvas rect with blur
+    const glow = (
+      cx: number, cy: number, r: number,
+      inner: string, outer: string,
       blurPx: number,
       alpha: number
     ) => {
       ctx.save();
       ctx.globalAlpha = alpha;
       ctx.filter = `blur(${blurPx}px)`;
-
-      const n = pts.length;
-      ctx.beginPath();
-      for (let i = 0; i < n; i++) {
-        const p0 = pts[(i - 1 + n) % n];
-        const p1 = pts[i];
-        const p2 = pts[(i + 1) % n];
-        const p3 = pts[(i + 2) % n];
-        const cp1x = p1[0] + (p2[0] - p0[0]) / 5;
-        const cp1y = p1[1] + (p2[1] - p0[1]) / 5;
-        const cp2x = p2[0] - (p3[0] - p1[0]) / 5;
-        const cp2y = p2[1] - (p3[1] - p1[1]) / 5;
-        if (i === 0) ctx.moveTo(p1[0], p1[1]);
-        ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, p2[0], p2[1]);
-      }
-      ctx.closePath();
-
-      const g = ctx.createRadialGradient(gradX, gradY, 0, gradX, gradY, gradR);
-      g.addColorStop(0,    c0);
-      g.addColorStop(0.40, c1);
-      g.addColorStop(0.80, c2);
+      const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
+      g.addColorStop(0,    inner);
+      g.addColorStop(0.55, outer);
       g.addColorStop(1,    "rgba(0,0,0,0)");
       ctx.fillStyle = g;
-      ctx.fill();
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
       ctx.restore();
     };
 
-    // Gentle oscillators for slow organic drift
     const s = (a: number, f: number, ph = 0) => Math.sin(t * f + ph) * a;
     const c = (a: number, f: number, ph = 0) => Math.cos(t * f + ph) * a;
 
@@ -66,82 +43,54 @@ function GlowCanvas() {
       ctx.clearRect(0, 0, W, H);
       ctx.filter = "none";
 
-      // ── Shape 1 — LARGE dominant teal/cyan mass (right-center dominant) ──
-      // This is the big volumetric form filling ~60% of the hero, like in the reference.
-      // Outline traces a large irregular wing/crescent anchored to the right side.
-      filledShape(
-        [
-          [W*(0.90+s(0.02,0.10)),  H*(0.00+c(0.03,0.08))],  // top-right
-          [W*(1.05+s(0.02,0.12)),  H*(0.30+c(0.03,0.11))],  // far right
-          [W*(0.95+c(0.02,0.09)),  H*(0.65+s(0.03,0.13))],  // right-lower
-          [W*(0.70+s(0.03,0.14)),  H*(0.85+c(0.02,0.10))],  // lower
-          [W*(0.40+c(0.03,0.11)),  H*(0.78+s(0.03,0.09))],  // lower-left
-          [W*(0.18+s(0.02,0.13)),  H*(0.58+c(0.03,0.12))],  // left waist (the "neck")
-          [W*(0.28+c(0.03,0.10)),  H*(0.28+s(0.02,0.08))],  // upper-left
-          [W*(0.55+s(0.02,0.09)),  H*(0.05+c(0.03,0.11))],  // top-center
-        ],
-        W*0.62, H*0.22,   // hot-spot upper-right area
-        W*0.65,           // gradient radius
-        "rgba(0,225,210,0.95)",   // bright cyan core
-        "rgba(0,130,175,0.55)",   // teal mid
-        "rgba(0,40,120,0.15)",    // deep blue edge
-        45, 0.85
+      // ── 1. Deep royal-blue atmosphere (the broad dark-blue volume on the right)
+      //    Matches the large blue field behind the teal in the reference.
+      glow(
+        W * (0.68 + s(0.03, 0.10)), H * (0.40 + c(0.03, 0.09)),
+        W * 0.72,
+        "rgba(10, 55, 175, 0.92)",
+        "rgba(3,  18,  80, 0.50)",
+        55, 0.92
       );
 
-      // ── Shape 2 — deeper blue underlayer (behind shape 1, sets the atmosphere) ──
-      filledShape(
-        [
-          [W*(0.80+c(0.03,0.07)),  H*(-0.05+s(0.02,0.06))],
-          [W*(1.10+s(0.02,0.08)),  H*(0.45+c(0.03,0.07))],
-          [W*(0.85+c(0.02,0.09)),  H*(0.95+s(0.02,0.08))],
-          [W*(0.45+s(0.03,0.07)),  H*(1.00+c(0.02,0.09))],
-          [W*(0.10+c(0.02,0.08)),  H*(0.70+s(0.03,0.07))],
-          [W*(0.05+s(0.02,0.09)),  H*(0.30+c(0.02,0.08))],
-          [W*(0.30+c(0.03,0.07)),  H*(0.05+s(0.02,0.06))],
-        ],
-        W*0.68, H*0.30,
-        W*0.80,
-        "rgba(10,80,210,0.80)",
-        "rgba(5,40,130,0.45)",
-        "rgba(2,15,70,0.12)",
-        60, 0.80
+      // ── 2. Upper teal lobe — the dominant bright teal mass (upper-right)
+      //    This is the brightest, most saturated area visible in the hero.
+      glow(
+        W * (0.67 + s(0.025, 0.14)), H * (0.20 + c(0.030, 0.12)),
+        W * 0.40,
+        "rgba(0, 228, 212, 1.00)",
+        "rgba(0, 130, 172, 0.42)",
+        28, 0.92
       );
 
-      // ── Shape 3 — secondary teal "wing" (upper left, like in thumbnail 1) ──
-      filledShape(
-        [
-          [W*(0.05+s(0.02,0.16)),  H*(0.05+c(0.03,0.14))],
-          [W*(0.38+c(0.03,0.18)),  H*(0.00+s(0.02,0.15))],
-          [W*(0.50+s(0.02,0.17)),  H*(0.22+c(0.03,0.16))],
-          [W*(0.35+c(0.02,0.19)),  H*(0.45+s(0.03,0.17))],
-          [W*(0.10+s(0.03,0.16)),  H*(0.42+c(0.02,0.15))],
-          [W*(-0.05+c(0.02,0.18)), H*(0.22+s(0.03,0.14))],
-        ],
-        W*0.28, H*0.16,
-        W*0.36,
-        "rgba(0,210,200,0.85)",
-        "rgba(0,110,170,0.40)",
-        "rgba(0,30,100,0.08)",
-        38, 0.70
+      // ── 3. Lower teal lobe — the secondary mass (lower-center)
+      //    Together with #2 it creates the S-curve / flowing form.
+      glow(
+        W * (0.44 + c(0.030, 0.16)), H * (0.72 + s(0.025, 0.14)),
+        W * 0.30,
+        "rgba(0, 200, 188, 0.88)",
+        "rgba(0, 100, 155, 0.38)",
+        32, 0.80
       );
 
-      // ── Shape 4 — bright hot-spot accent (the "fold" highlight seen in reference) ──
-      // This is the very bright concentrated teal that makes it look lit from within.
-      filledShape(
-        [
-          [W*(0.48+s(0.02,0.22)),  H*(0.08+c(0.02,0.20))],
-          [W*(0.68+c(0.02,0.24)),  H*(0.12+s(0.02,0.21))],
-          [W*(0.72+s(0.02,0.23)),  H*(0.35+c(0.02,0.22))],
-          [W*(0.58+c(0.02,0.24)),  H*(0.42+s(0.02,0.20))],
-          [W*(0.40+s(0.02,0.22)),  H*(0.35+c(0.02,0.23))],
-          [W*(0.38+c(0.02,0.21)),  H*(0.15+s(0.02,0.22))],
-        ],
-        W*0.57, H*0.22,
-        W*0.22,
-        "rgba(160,255,248,0.95)",  // almost white-cyan at core
-        "rgba(0,210,200,0.50)",
-        "rgba(0,100,160,0.10)",
-        22, 0.80
+      // ── 4. Connecting neck (darker teal-blue waist linking the two lobes)
+      //    This creates the narrow pinch seen in the middle of the form.
+      glow(
+        W * (0.56 + s(0.020, 0.20)), H * (0.45 + c(0.025, 0.18)),
+        W * 0.18,
+        "rgba(0, 110, 172, 0.65)",
+        "rgba(0,  42, 105, 0.28)",
+        22, 0.72
+      );
+
+      // ── 5. Bright white-teal hotspot (the near-white peak at the top of the upper lobe)
+      //    The very bright concentrated point seen clearly in the reference.
+      glow(
+        W * (0.64 + s(0.015, 0.26)), H * (0.15 + c(0.018, 0.23)),
+        W * 0.12,
+        "rgba(190, 255, 250, 0.96)",
+        "rgba(  0, 228, 215, 0.48)",
+        14, 0.88
       );
 
       t += 0.003;
