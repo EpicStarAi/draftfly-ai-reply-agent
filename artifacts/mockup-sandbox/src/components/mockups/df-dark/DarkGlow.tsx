@@ -1,8 +1,50 @@
 import "./dark.css";
 import { useEffect, useRef } from "react";
 
+type Pt = [number, number];
+
+// Cubic bezier point
+const bez = (p0: Pt, p1: Pt, p2: Pt, p3: Pt, s: number): Pt => {
+  const mt = 1 - s;
+  return [
+    mt*mt*mt*p0[0] + 3*mt*mt*s*p1[0] + 3*mt*s*s*p2[0] + s*s*s*p3[0],
+    mt*mt*mt*p0[1] + 3*mt*mt*s*p1[1] + 3*mt*s*s*p2[1] + s*s*s*p3[1],
+  ];
+};
+
+// Build ribbon outline (upper/lower edges) along a bezier spine
+const buildRibbon = (
+  p0: Pt, p1: Pt, p2: Pt, p3: Pt,
+  maxW: number, segs = 70
+): [Pt[], Pt[]] => {
+  const upper: Pt[] = [], lower: Pt[] = [];
+  const eps = 0.003;
+  for (let i = 0; i <= segs; i++) {
+    const s  = i / segs;
+    const [x, y]   = bez(p0, p1, p2, p3, s);
+    const [nx, ny] = bez(p0, p1, p2, p3, Math.min(s + eps, 1));
+    const dx = nx - x, dy = ny - y;
+    const len = Math.hypot(dx, dy) || 1;
+    const px = -dy / len, py = dx / len;           // perpendicular
+    // Bell width — taper to 0 at both ends, peak in middle
+    const w = maxW * Math.pow(Math.sin(s * Math.PI), 0.7);
+    upper.push([x + px * w, y + py * w]);
+    lower.push([x - px * w, y - py * w]);
+  }
+  return [upper, lower];
+};
+
+// Trace a ribbon outline as a closed canvas path
+const tracePath = (ctx: CanvasRenderingContext2D, upper: Pt[], lower: Pt[]) => {
+  ctx.beginPath();
+  ctx.moveTo(upper[0][0], upper[0][1]);
+  for (const p of upper) ctx.lineTo(p[0], p[1]);
+  for (let i = lower.length - 1; i >= 0; i--) ctx.lineTo(lower[i][0], lower[i][1]);
+  ctx.closePath();
+};
+
 function GlowCanvas() {
-  const ref = useRef<HTMLCanvasElement>(null);
+  const ref    = useRef<HTMLCanvasElement>(null);
   const animRef = useRef<number>(0);
 
   useEffect(() => {
@@ -12,297 +54,146 @@ function GlowCanvas() {
     let t = 0;
 
     const resize = () => {
-      canvas.width = canvas.offsetWidth;
+      canvas.width  = canvas.offsetWidth;
       canvas.height = canvas.offsetHeight;
     };
 
-    // ── Organic blob: bezier polygon with per-vertex animated distortion ──
-    function organicBlob(
-      cx: number, cy: number,
-      rx: number, ry: number,
-      rotation: number,
-      n: number,           // num control points
-      wobble: number,      // distortion amplitude 0–1
-      phase: number,
-      innerColor: string,
-      outerColor: string,
-      alpha = 1
-    ) {
+    // Draw one ribbon: outer diffuse glow + narrow bright core
+    const ribbon = (
+      p0: Pt, p1: Pt, p2: Pt, p3: Pt,
+      maxW: number,
+      coreColor: string,   // rgba for the bright spine
+      glowColor: string,   // rgba for the outer haze
+      alpha = 1,
+      blurOuter = 28,
+      blurCore  = 7
+    ) => {
+      const [upper, lower] = buildRibbon(p0, p1, p2, p3, maxW);
+
+      // ── Outer glow (wide + heavily blurred) ──
       ctx.save();
-      ctx.globalAlpha = alpha;
-      ctx.translate(cx, cy);
-      ctx.rotate(rotation);
-
-      // Build distorted control points
-      const pts: [number, number][] = [];
-      for (let i = 0; i < n; i++) {
-        const a = (i / n) * Math.PI * 2;
-        const dist =
-          1
-          + wobble * Math.sin(t * 0.6 + phase + i * 2.39)
-          + wobble * 0.5 * Math.cos(t * 0.9 + phase * 1.7 + i * 3.71)
-          + wobble * 0.3 * Math.sin(t * 1.3 + phase * 0.6 + i * 5.13);
-        pts.push([
-          Math.cos(a) * rx * dist,
-          Math.sin(a) * ry * dist,
-        ]);
-      }
-
-      // Smooth bezier through points
-      ctx.beginPath();
-      for (let i = 0; i < n; i++) {
-        const p0 = pts[(i - 1 + n) % n];
-        const p1 = pts[i];
-        const p2 = pts[(i + 1) % n];
-        const cp1x = p1[0] + (p2[0] - p0[0]) * 0.25;
-        const cp1y = p1[1] + (p2[1] - p0[1]) * 0.25;
-        const cp2x = p2[0] - (pts[(i + 2) % n][0] - p1[0]) * 0.25;
-        const cp2y = p2[1] - (pts[(i + 2) % n][1] - p1[1]) * 0.25;
-        if (i === 0) ctx.moveTo(p1[0], p1[1]);
-        ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, p2[0], p2[1]);
-      }
-      ctx.closePath();
-
-      // Radial gradient fill (from canvas origin = blob center)
-      const maxR = Math.max(rx, ry) * 1.6;
-      const g = ctx.createRadialGradient(0, 0, 0, 0, 0, maxR);
-      g.addColorStop(0, innerColor);
-      g.addColorStop(0.5, outerColor);
-      g.addColorStop(1, "rgba(0,0,0,0)");
-      ctx.fillStyle = g;
-      ctx.filter = "blur(18px)";
+      ctx.globalAlpha = alpha * 0.55;
+      ctx.filter = `blur(${blurOuter}px)`;
+      tracePath(ctx, upper, lower);
+      ctx.fillStyle = glowColor;
       ctx.fill();
       ctx.restore();
-    }
 
-    // ── Glowing ring: annular shape with animated wobble ──
-    function glowRing(
-      cx: number, cy: number,
-      r: number, thickness: number,
-      rotation: number,
-      color: string,
-      alpha = 1
-    ) {
+      // ── Mid haze (medium blur) ──
       ctx.save();
-      ctx.globalAlpha = alpha;
-      ctx.translate(cx, cy);
-      ctx.rotate(rotation + t * 0.08);
-
-      const n = 80;
-      ctx.beginPath();
-      for (let i = 0; i <= n; i++) {
-        const a = (i / n) * Math.PI * 2;
-        const wobble = 1 + 0.08 * Math.sin(t * 1.1 + i * 4.2) + 0.04 * Math.cos(t * 0.7 + i * 7.5);
-        const ro = (r + thickness * 0.5) * wobble;
-        i === 0 ? ctx.moveTo(Math.cos(a) * ro, Math.sin(a) * ro)
-                : ctx.lineTo(Math.cos(a) * ro, Math.sin(a) * ro);
-      }
-      for (let i = n; i >= 0; i--) {
-        const a = (i / n) * Math.PI * 2;
-        const wobble = 1 + 0.08 * Math.sin(t * 1.1 + i * 4.2) + 0.04 * Math.cos(t * 0.7 + i * 7.5);
-        const ri = (r - thickness * 0.5) * wobble;
-        ctx.lineTo(Math.cos(a) * ri, Math.sin(a) * ri);
-      }
-      ctx.closePath();
-
-      const g = ctx.createRadialGradient(0, 0, r - thickness, 0, 0, r + thickness);
-      g.addColorStop(0, "rgba(0,0,0,0)");
-      g.addColorStop(0.4, color);
-      g.addColorStop(0.6, color);
-      g.addColorStop(1, "rgba(0,0,0,0)");
-      ctx.fillStyle = g;
-      ctx.filter = "blur(8px)";
+      ctx.globalAlpha = alpha * 0.7;
+      ctx.filter = `blur(${blurCore * 2}px)`;
+      const [u2, l2] = buildRibbon(p0, p1, p2, p3, maxW * 0.55);
+      tracePath(ctx, u2, l2);
+      ctx.fillStyle = coreColor;
       ctx.fill();
       ctx.restore();
-    }
 
-    // ── Light streak: thin rotated ellipse ──
-    function streak(
-      cx: number, cy: number,
-      len: number, width: number,
-      angle: number,
-      color: string,
-      alpha = 1
-    ) {
+      // ── Bright core (narrow + sharp) ──
       ctx.save();
       ctx.globalAlpha = alpha;
-      ctx.translate(cx, cy);
-      ctx.rotate(angle + t * 0.05);
-      ctx.beginPath();
-      ctx.ellipse(0, 0, len, width, 0, 0, Math.PI * 2);
-      const g = ctx.createLinearGradient(-len, 0, len, 0);
-      g.addColorStop(0, "rgba(0,0,0,0)");
-      g.addColorStop(0.3, color);
-      g.addColorStop(0.5, color);
-      g.addColorStop(0.7, color);
-      g.addColorStop(1, "rgba(0,0,0,0)");
-      ctx.fillStyle = g;
-      ctx.filter = "blur(6px)";
+      ctx.filter = `blur(${blurCore}px)`;
+      const [u3, l3] = buildRibbon(p0, p1, p2, p3, maxW * 0.22);
+      tracePath(ctx, u3, l3);
+      ctx.fillStyle = coreColor;
       ctx.fill();
       ctx.restore();
-    }
-
-    // ── Crescent: two overlapping blobs subtracted ──
-    function crescent(
-      cx: number, cy: number,
-      r: number, offsetX: number, offsetY: number,
-      rotation: number,
-      color: string,
-      alpha = 1
-    ) {
-      ctx.save();
-      ctx.globalAlpha = alpha;
-      ctx.translate(cx, cy);
-      ctx.rotate(rotation + t * 0.04);
-
-      // Outer arc
-      ctx.beginPath();
-      ctx.arc(0, 0, r, 0, Math.PI * 2);
-      // Inner cutout (even-odd fill rule creates crescent)
-      ctx.arc(
-        offsetX + Math.sin(t * 0.3) * r * 0.06,
-        offsetY + Math.cos(t * 0.25) * r * 0.05,
-        r * 0.72, 0, Math.PI * 2, true
-      );
-      ctx.closePath();
-
-      const g = ctx.createRadialGradient(-r * 0.2, -r * 0.2, 0, 0, 0, r);
-      g.addColorStop(0, color);
-      g.addColorStop(0.6, color.replace(/[\d.]+\)$/, "0.3)"));
-      g.addColorStop(1, "rgba(0,0,0,0)");
-      ctx.fillStyle = g;
-      ctx.filter = "blur(14px)";
-      ctx.fill("evenodd");
-      ctx.restore();
-    }
+    };
 
     // Smooth oscillators
-    const s  = (a: number, f: number, ph = 0) => Math.sin(t * f + ph) * a;
-    const c  = (a: number, f: number, ph = 0) => Math.cos(t * f + ph) * a;
+    const s = (a: number, f: number, ph = 0) => Math.sin(t * f + ph) * a;
+    const c = (a: number, f: number, ph = 0) => Math.cos(t * f + ph) * a;
 
     const draw = () => {
       const W = canvas.width, H = canvas.height;
       ctx.clearRect(0, 0, W, H);
       ctx.filter = "none";
 
-      // ── Deep background pools ──
-      organicBlob(
-        W * 0.78 + s(W * 0.04, 0.18),  H * 0.1 + c(H * 0.04, 0.14),
-        W * 0.48, W * 0.32,
-        t * 0.02, 6, 0.18, 0,
-        "rgba(4,14,68,0.95)", "rgba(5,20,88,0.5)", 0.9
-      );
-      organicBlob(
-        W * 0.1 + s(W * 0.03, 0.15),  H * 0.9 + c(H * 0.05, 0.11),
-        W * 0.38, W * 0.28,
-        -t * 0.025, 5, 0.2, 2.1,
-        "rgba(10,5,78,0.9)", "rgba(16,8,92,0.42)", 0.85
+      // ── Deep background radial (keeps the dark blue atmosphere) ──
+      ctx.save();
+      ctx.filter = "blur(70px)";
+      ctx.globalAlpha = 0.85;
+      const bg = ctx.createRadialGradient(W*0.48, H*0.38, 0, W*0.48, H*0.38, W*0.6);
+      bg.addColorStop(0,   "rgba(6, 22, 100, 0.9)");
+      bg.addColorStop(0.5, "rgba(3, 10,  60, 0.5)");
+      bg.addColorStop(1,   "rgba(0,  0,   0, 0)");
+      ctx.fillStyle = bg;
+      ctx.fillRect(0, 0, W, H);
+      ctx.restore();
+
+      // ── Ribbon 1 — large sweeping teal arc (slow, dominant) ──
+      ribbon(
+        [W*(0.05 + s(0.04, 0.14)),    H*(1.05 + c(0.03, 0.10))],
+        [W*(0.55 + s(0.06, 0.18)),    H*(0.08 + c(0.05, 0.15))],
+        [W*(0.38 + c(0.05, 0.22)),    H*(0.62 + s(0.04, 0.20))],
+        [W*(0.92 + c(0.03, 0.16)),    H*(0.28 + s(0.05, 0.12))],
+        W * 0.13,
+        "rgba(0, 215, 200, 0.9)",
+        "rgba(0, 100, 160, 0.55)",
+        0.88, 32, 8
       );
 
-      // ── Main royal-blue organic mass (large, slow) ──
-      organicBlob(
-        W * 0.3 + s(W * 0.09, 0.22) + c(W * 0.04, 0.51),
-        H * 0.5 + c(H * 0.08, 0.19) + s(H * 0.03, 0.44),
-        W * 0.44, W * 0.32,
-        t * 0.015, 8, 0.28, 0.5,
-        "rgba(18,88,252,0.65)", "rgba(10,55,190,0.28)", 1
+      // ── Ribbon 2 — deep blue background sweep (wide, hazy) ──
+      ribbon(
+        [W*(-0.05 + c(0.03, 0.11)),   H*(0.55 + s(0.05, 0.09))],
+        [W*(0.48  + s(0.07, 0.15)),   H*(0.10 + c(0.06, 0.13))],
+        [W*(0.52  + c(0.05, 0.20)),   H*(0.78 + s(0.04, 0.17))],
+        [W*(1.08  + s(0.03, 0.13)),   H*(0.42 + c(0.04, 0.11))],
+        W * 0.20,
+        "rgba(15, 80, 230, 0.75)",
+        "rgba(5,  28, 120, 0.45)",
+        0.72, 40, 12
       );
 
-      // ── Secondary sweeping arm ──
-      organicBlob(
-        W * 0.72 + s(W * 0.08, 0.28) + c(W * 0.03, 0.62),
-        H * 0.28 + c(H * 0.1,  0.24) + s(H * 0.04, 0.55),
-        W * 0.35, W * 0.22,
-        -t * 0.02, 7, 0.24, 1.2,
-        "rgba(8,105,235,0.52)", "rgba(4,64,178,0.22)", 0.9
+      // ── Ribbon 3 — cyan flame tendril (curls up, medium) ──
+      ribbon(
+        [W*(0.42 + s(0.03, 0.30)),    H*(1.02)],
+        [W*(0.28 + c(0.06, 0.25)),    H*(0.52 + s(0.05, 0.23))],
+        [W*(0.68 + s(0.05, 0.33)),    H*(0.22 + c(0.06, 0.28))],
+        [W*(0.52 + c(0.04, 0.37)),    H*(-0.04)],
+        W * 0.072,
+        "rgba(70, 235, 225, 0.95)",
+        "rgba(0, 160, 180, 0.5)",
+        0.92, 22, 6
       );
 
-      // ── Top curling lobe ──
-      organicBlob(
-        W * 0.54 + c(W * 0.07, 0.35) + s(W * 0.03, 0.8),
-        H * 0.05 + s(H * 0.08, 0.3)  + c(H * 0.03, 0.68),
-        W * 0.28, W * 0.18,
-        t * 0.03, 6, 0.22, 2.5,
-        "rgba(28,115,248,0.44)", "rgba(14,75,200,0.18)", 0.85
+      // ── Ribbon 4 — rightward teal arc ──
+      ribbon(
+        [W*(0.68 + c(0.04, 0.21)),    H*(1.02)],
+        [W*(0.98 + s(0.03, 0.18)),    H*(0.48 + c(0.05, 0.16))],
+        [W*(0.52 + c(0.05, 0.24)),    H*(0.18 + s(0.04, 0.21))],
+        [W*(0.78 + s(0.04, 0.27)),    H*(-0.04)],
+        W * 0.058,
+        "rgba(30, 225, 215, 0.85)",
+        "rgba(0, 120, 150, 0.38)",
+        0.72, 20, 6
       );
 
-      // ── Glowing rings ──
-      glowRing(
-        W * 0.42 + s(W * 0.06, 0.31),
-        H * 0.46 + c(H * 0.06, 0.27),
-        W * 0.22, W * 0.025,
-        0, "rgba(60,160,255,0.55)", 0.7
-      );
-      glowRing(
-        W * 0.62 + c(W * 0.05, 0.4),
-        H * 0.32 + s(H * 0.07, 0.36),
-        W * 0.14, W * 0.016,
-        Math.PI * 0.3, "rgba(30,200,255,0.45)", 0.6
+      // ── Ribbon 5 — diagonal cross-sweep (bottom-right to top-left) ──
+      ribbon(
+        [W*(0.95 + s(0.03, 0.19)),    H*(0.85 + c(0.04, 0.16))],
+        [W*(0.6  + c(0.05, 0.23)),    H*(0.55 + s(0.05, 0.20))],
+        [W*(0.42 + s(0.04, 0.27)),    H*(0.28 + c(0.04, 0.24))],
+        [W*(0.1  + c(0.03, 0.31)),    H*(-0.02)],
+        W * 0.048,
+        "rgba(0, 200, 220, 0.8)",
+        "rgba(0,  80, 140, 0.35)",
+        0.65, 18, 5
       );
 
-      // ── Crescents ──
-      crescent(
-        W * 0.35 + s(W * 0.05, 0.45),
-        H * 0.38 + c(H * 0.06, 0.4),
-        W * 0.17, W * 0.1, H * 0.04,
-        0.8, "rgba(40,140,255,0.6)", 0.75
-      );
-      crescent(
-        W * 0.7  + c(W * 0.04, 0.52),
-        H * 0.6  + s(H * 0.05, 0.47),
-        W * 0.12, W * 0.07, H * 0.03,
-        -0.5, "rgba(0,200,220,0.45)", 0.6
+      // ── Ribbon 6 — hot white-cyan highlight (thin, fast) ──
+      ribbon(
+        [W*(0.38 + c(0.02, 0.44)),    H*(0.78 + s(0.03, 0.39))],
+        [W*(0.50 + s(0.04, 0.37)),    H*(0.42 + c(0.04, 0.33))],
+        [W*(0.44 + c(0.03, 0.41)),    H*(0.18 + s(0.03, 0.37))],
+        [W*(0.58 + s(0.02, 0.47)),    H*(0.02)],
+        W * 0.026,
+        "rgba(210, 255, 252, 0.98)",
+        "rgba( 80, 215, 225, 0.45)",
+        0.9, 12, 4
       );
 
-      // ── Streaks ──
-      streak(
-        W * 0.5  + s(W * 0.12, 0.22),
-        H * 0.35 + c(H * 0.08, 0.19),
-        W * 0.32, W * 0.012,
-        0.6 + t * 0.03,
-        "rgba(80,180,255,0.5)", 0.65
-      );
-      streak(
-        W * 0.3  + c(W * 0.1, 0.29),
-        H * 0.62 + s(H * 0.07, 0.26),
-        W * 0.22, W * 0.008,
-        -0.4 - t * 0.02,
-        "rgba(0,220,210,0.4)", 0.55
-      );
-      streak(
-        W * 0.68 + s(W * 0.06, 0.41),
-        H * 0.2  + c(H * 0.06, 0.36),
-        W * 0.18, W * 0.007,
-        1.1 + t * 0.025,
-        "rgba(100,200,255,0.38)", 0.5
-      );
-
-      // ── Bright highlight cores ──
-      organicBlob(
-        W * 0.42 + s(W * 0.04, 0.65) + c(W * 0.02, 1.1),
-        H * 0.44 + c(H * 0.04, 0.58) + s(H * 0.02, 0.97),
-        W * 0.11, W * 0.08,
-        t * 0.06, 5, 0.15, 0.8,
-        "rgba(110,200,255,0.82)", "rgba(55,158,255,0.35)", 1
-      );
-      organicBlob(
-        W * 0.66 + c(W * 0.03, 0.77) + s(W * 0.02, 1.3),
-        H * 0.22 + s(H * 0.04, 0.69) + c(H * 0.02, 1.1),
-        W * 0.07, W * 0.055,
-        -t * 0.08, 5, 0.12, 4.2,
-        "rgba(60,215,255,0.75)", "rgba(20,168,240,0.28)", 0.9
-      );
-
-      // ── Pinpoint hot core ──
-      organicBlob(
-        W * 0.39 + s(W * 0.02, 1.1) + c(W * 0.01, 1.8),
-        H * 0.42 + c(H * 0.02, 0.95) + s(H * 0.01, 1.6),
-        W * 0.042, W * 0.034,
-        t * 0.1, 4, 0.1, 1.5,
-        "rgba(200,238,255,0.92)", "rgba(120,200,255,0.4)", 1
-      );
-
-      t += 0.005;
+      t += 0.004;
       animRef.current = requestAnimationFrame(draw);
     };
 
