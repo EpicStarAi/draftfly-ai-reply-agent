@@ -16,124 +16,128 @@ function GlowCanvas() {
       canvas.height = canvas.offsetHeight;
     };
 
+    // Draw a radial gradient blob
     const blob = (
       cx: number, cy: number, r: number,
-      inner: string, mid: string, outer: string,
+      c0: string, c1: string, c2: string,
       alpha = 1
     ) => {
       const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
-      g.addColorStop(0,   inner);
-      g.addColorStop(0.35, mid);
-      g.addColorStop(0.7, outer);
-      g.addColorStop(1,   "rgba(0,0,0,0)");
+      g.addColorStop(0,    c0);
+      g.addColorStop(0.38, c1);
+      g.addColorStop(0.75, c2);
+      g.addColorStop(1,    "rgba(0,0,0,0)");
       ctx.globalAlpha = alpha;
       ctx.fillStyle = g;
       ctx.fillRect(0, 0, canvas.width, canvas.height);
       ctx.globalAlpha = 1;
     };
 
+    // Smooth organic position — sum of two sine waves with different freqs
+    const ox = (base: number, a1: number, f1: number, a2: number, f2: number, ph = 0) =>
+      base + Math.sin(t * f1 + ph) * a1 + Math.sin(t * f2 + ph * 1.3) * a2;
+    const oy = (base: number, a1: number, f1: number, a2: number, f2: number, ph = 0) =>
+      base + Math.cos(t * f1 + ph) * a1 + Math.cos(t * f2 + ph * 0.7) * a2;
+
     const draw = () => {
-      resize();
       const W = canvas.width, H = canvas.height;
       ctx.clearRect(0, 0, W, H);
 
-      const s = (v: number, amp: number, speed: number) =>
-        v + Math.sin(t * speed) * amp;
-      const c = (v: number, amp: number, speed: number) =>
-        v + Math.cos(t * speed) * amp;
-
-      // ── Layer 1: deep background pools (far, dark) ──
-      // deep navy pool — top right
+      // ── Layer 0: far background — deep navy anchors ──
       blob(
-        W * 0.78, H * 0.15, W * 0.55,
-        "rgba(5,20,80,0.9)",
-        "rgba(8,30,110,0.5)",
-        "rgba(0,10,40,0.15)",
+        ox(W * 0.8, W * 0.06, 0.18, W * 0.03, 0.41, 0),
+        oy(H * 0.12, H * 0.05, 0.22, H * 0.02, 0.37, 0),
+        W * 0.58,
+        "rgba(4,16,72,0.95)", "rgba(6,24,90,0.5)", "rgba(2,8,35,0.1)",
         0.9
       );
-      // deep indigo — bottom left
       blob(
-        W * 0.12, H * 0.85, W * 0.48,
-        "rgba(20,10,90,0.85)",
-        "rgba(30,15,100,0.4)",
-        "rgba(0,0,0,0)",
-        0.8
+        ox(W * 0.1, W * 0.05, 0.15, W * 0.03, 0.34, 2.1),
+        oy(H * 0.88, H * 0.06, 0.19, H * 0.02, 0.43, 2.1),
+        W * 0.46,
+        "rgba(12,6,80,0.9)", "rgba(18,10,95,0.42)", "rgba(0,0,0,0)",
+        0.85
       );
 
-      // ── Layer 2: mid-depth royal blue volumes ──
-      // large left core
+      // ── Layer 1: large sweeping royal-blue volumes ──
+      // Primary left mass — slowest, biggest
       blob(
-        s(W * 0.3, W * 0.03, 0.4), s(H * 0.48, H * 0.04, 0.3),
-        W * 0.48,
-        "rgba(20,90,255,0.65)",
-        "rgba(10,60,200,0.35)",
-        "rgba(0,20,80,0.08)"
+        ox(W * 0.28, W * 0.12, 0.25, W * 0.05, 0.57, 0.5),
+        oy(H * 0.5,  H * 0.1,  0.21, H * 0.04, 0.48, 0.5),
+        W * 0.52,
+        "rgba(18,88,255,0.62)", "rgba(10,58,195,0.3)", "rgba(0,18,72,0.06)"
       );
-      // sweeping right arm
+      // Right sweeping arm
       blob(
-        c(W * 0.7, W * 0.04, 0.35), s(H * 0.35, H * 0.05, 0.45),
-        W * 0.38,
-        "rgba(0,110,240,0.5)",
-        "rgba(5,70,190,0.25)",
-        "rgba(0,0,0,0)"
+        ox(W * 0.72, W * 0.1, 0.32, W * 0.04, 0.63, 1.2),
+        oy(H * 0.3,  H * 0.12, 0.27, H * 0.05, 0.52, 1.2),
+        W * 0.4,
+        "rgba(8,105,235,0.48)", "rgba(4,68,185,0.22)", "rgba(0,0,0,0)"
       );
-      // top curl
+      // Top curl that dips down
       blob(
-        s(W * 0.52, W * 0.05, 0.5), c(H * 0.08, H * 0.04, 0.4),
-        W * 0.32,
-        "rgba(30,120,255,0.45)",
-        "rgba(15,80,210,0.2)",
-        "rgba(0,0,0,0)"
+        ox(W * 0.55, W * 0.08, 0.38, W * 0.04, 0.71, 2.5),
+        oy(H * 0.06, H * 0.1,  0.31, H * 0.04, 0.59, 2.5),
+        W * 0.34,
+        "rgba(28,115,250,0.42)", "rgba(14,78,205,0.18)", "rgba(0,0,0,0)"
       );
 
-      // ── Layer 3: bright cyan/electric highlights (close, intense) ──
-      // central hot spot
+      // ── Layer 2: mid brighter secondary cores ──
       blob(
-        s(W * 0.42, W * 0.025, 0.7), c(H * 0.42, H * 0.03, 0.6),
-        W * 0.18,
-        "rgba(80,180,255,0.75)",
-        "rgba(40,140,255,0.35)",
-        "rgba(10,80,220,0.05)"
+        ox(W * 0.62, W * 0.09, 0.44, W * 0.03, 0.83, 3.8),
+        oy(H * 0.58, H * 0.08, 0.38, H * 0.03, 0.72, 3.8),
+        W * 0.24,
+        "rgba(40,148,255,0.55)", "rgba(20,110,240,0.25)", "rgba(0,0,0,0)"
       );
-      // secondary cyan flare — upper right
       blob(
-        c(W * 0.68, W * 0.03, 0.55), s(H * 0.22, H * 0.04, 0.48),
-        W * 0.14,
-        "rgba(60,200,255,0.6)",
-        "rgba(20,150,240,0.28)",
-        "rgba(0,0,0,0)"
-      );
-      // lower teal glint
-      blob(
-        s(W * 0.58, W * 0.02, 0.62), c(H * 0.7, H * 0.03, 0.52),
-        W * 0.12,
-        "rgba(0,220,210,0.4)",
-        "rgba(0,160,180,0.18)",
-        "rgba(0,0,0,0)"
+        ox(W * 0.3,  W * 0.07, 0.51, W * 0.03, 0.9, 5.1),
+        oy(H * 0.28, H * 0.09, 0.43, H * 0.03, 0.78, 5.1),
+        W * 0.2,
+        "rgba(55,160,255,0.5)", "rgba(28,120,245,0.22)", "rgba(0,0,0,0)"
       );
 
-      // ── Layer 4: ultra-bright core pinpoint ──
+      // ── Layer 3: cyan/teal highlights — fast and close ──
       blob(
-        s(W * 0.38, W * 0.015, 0.9), s(H * 0.4, H * 0.02, 0.8),
-        W * 0.07,
-        "rgba(160,220,255,0.85)",
-        "rgba(80,170,255,0.4)",
-        "rgba(0,0,0,0)"
+        ox(W * 0.42, W * 0.07, 0.65, W * 0.025, 1.1, 0.8),
+        oy(H * 0.44, H * 0.07, 0.58, H * 0.025, 0.97, 0.8),
+        W * 0.15,
+        "rgba(90,195,255,0.72)", "rgba(45,155,255,0.32)", "rgba(10,80,210,0.04)"
+      );
+      // teal glint — drifts independently
+      blob(
+        ox(W * 0.64, W * 0.06, 0.77, W * 0.02, 1.25, 4.2),
+        oy(H * 0.65, H * 0.07, 0.69, H * 0.02, 1.08, 4.2),
+        W * 0.1,
+        "rgba(0,225,215,0.42)", "rgba(0,170,190,0.18)", "rgba(0,0,0,0)"
+      );
+      // electric cyan top-right flare
+      blob(
+        ox(W * 0.76, W * 0.05, 0.83, W * 0.02, 1.4, 6.0),
+        oy(H * 0.18, H * 0.06, 0.74, H * 0.02, 1.2, 6.0),
+        W * 0.09,
+        "rgba(70,210,255,0.55)", "rgba(30,165,250,0.24)", "rgba(0,0,0,0)"
       );
 
-      // ── Layer 5: ambient scatter — tiny specks of light ──
-      for (let i = 0; i < 4; i++) {
-        const ang = t * 0.2 + (i * Math.PI * 2) / 4;
-        const rx = W * 0.44 + Math.cos(ang) * W * 0.22;
-        const ry = H * 0.44 + Math.sin(ang) * H * 0.18;
-        blob(rx, ry, W * 0.04,
-          "rgba(120,200,255,0.3)",
-          "rgba(60,160,255,0.12)",
-          "rgba(0,0,0,0)"
+      // ── Layer 4: ultra-bright pinpoint core ──
+      blob(
+        ox(W * 0.38, W * 0.04, 1.1, W * 0.015, 1.8, 1.5),
+        oy(H * 0.42, H * 0.04, 0.95, H * 0.015, 1.6, 1.5),
+        W * 0.065,
+        "rgba(180,230,255,0.88)", "rgba(100,190,255,0.38)", "rgba(0,0,0,0)"
+      );
+
+      // ── Layer 5: orbiting micro-sparks ──
+      for (let i = 0; i < 5; i++) {
+        const phase = (i / 5) * Math.PI * 2;
+        const speed = 0.28 + i * 0.04;
+        const rx = W * 0.44 + Math.cos(t * speed + phase) * W * 0.26;
+        const ry = H * 0.44 + Math.sin(t * speed * 0.75 + phase) * H * 0.2;
+        blob(rx, ry, W * 0.038,
+          "rgba(130,210,255,0.28)", "rgba(60,160,255,0.1)", "rgba(0,0,0,0)"
         );
       }
 
-      t += 0.004;
+      t += 0.006;
       animRef.current = requestAnimationFrame(draw);
     };
 
@@ -168,9 +172,11 @@ export function DarkGlow() {
         <a className="dg-nav-cta">Get early access</a>
       </nav>
 
-      {/* ── Hero ── */}
+      {/* ── Hero + glow ── */}
       <section className="dg-hero">
         <GlowCanvas />
+        {/* Bottom fade — blends glow into page */}
+        <div className="dg-hero-fade" />
         <div className="dg-hero-content">
           <h1 className="dg-headline">DraftFly.</h1>
           <p className="dg-sub">We automate outbound replies for innovative sales teams.</p>
@@ -181,7 +187,7 @@ export function DarkGlow() {
         </div>
       </section>
 
-      {/* ── Statement ── */}
+      {/* ── Statement — glow bleeds in from above ── */}
       <section className="dg-statement">
         <div className="dg-watermark">DRAFTFLY</div>
         <div className="dg-statement-content">
@@ -197,7 +203,6 @@ export function DarkGlow() {
       <section className="dg-what">
         <h2 className="dg-what-title">What we do</h2>
         <div className="dg-cards">
-          {/* Card 1 */}
           <div className="dg-card">
             <div className="dg-card-screen">
               <div className="dg-chat-row dg-chat-row--user">
@@ -220,10 +225,9 @@ export function DarkGlow() {
               </div>
             </div>
             <h3 className="dg-card-title">AI Draft Engine</h3>
-            <p className="dg-card-desc">We draft persona-matched replies from incoming emails in under 3 seconds using advanced context loading.</p>
+            <p className="dg-card-desc">Persona-matched replies drafted from incoming emails in under 3 seconds.</p>
           </div>
 
-          {/* Card 2 */}
           <div className="dg-card">
             <div className="dg-card-screen">
               <div className="dg-gen-label">Routing to Slack...</div>
@@ -234,7 +238,7 @@ export function DarkGlow() {
                 </div>
                 <div className="dg-slack-msg">
                   <div className="dg-slack-from">DraftFly Bot <span>2:04 PM</span></div>
-                  <div className="dg-slack-draft">"Hi John, happy to share pricing. Enterprise includes SSO, dedicated onboarding..."</div>
+                  <div className="dg-slack-draft">"Hi John, Enterprise includes SSO, dedicated onboarding..."</div>
                   <div className="dg-slack-btns">
                     <span className="dg-slack-btn dg-slack-btn--approve">Approve & Send</span>
                     <span className="dg-slack-btn">Edit</span>
@@ -247,7 +251,7 @@ export function DarkGlow() {
               </div>
             </div>
             <h3 className="dg-card-title">Slack Approval Flow</h3>
-            <p className="dg-card-desc">Every AI draft lands in your Slack channel for one-click approval. No inbox switching, no lost context.</p>
+            <p className="dg-card-desc">One-click Slack approvals. No inbox switching, no lost context.</p>
           </div>
         </div>
       </section>

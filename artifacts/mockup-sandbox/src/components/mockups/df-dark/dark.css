@@ -71,19 +71,34 @@
 /* ── Hero ── */
 .dg-hero {
   position: relative;
-  height: 520px;
+  height: 540px;
   display: flex;
   align-items: center;
   justify-content: center;
-  overflow: hidden;
+  /* overflow visible so glow bleeds into next section */
+  overflow: visible;
+  z-index: 1;
 }
 .dg-canvas {
   position: absolute;
-  inset: 0;
+  /* extend canvas 140px below hero so glow spills down */
+  top: 0; left: 0; right: 0;
+  bottom: -140px;
   width: 100%;
-  height: 100%;
+  height: calc(100% + 140px);
   pointer-events: none;
-  filter: blur(8px);
+  filter: blur(6px);
+  z-index: 0;
+}
+/* Smooth bottom fade — blends the glow into the page bg */
+.dg-hero-fade {
+  position: absolute;
+  bottom: -140px;
+  left: 0; right: 0;
+  height: 200px;
+  background: linear-gradient(to bottom, transparent 0%, #080808 100%);
+  pointer-events: none;
+  z-index: 2;
 }
 .dg-hero-content {
   position: relative;
