@@ -19,14 +19,18 @@ declare module "express-session" {
 const router = Router();
 
 function getRedirectUri(): string {
-  const domain = process.env["REPLIT_DOMAINS"]?.split(",")[0] ?? "localhost:5000";
-  return `https://${domain}/api/auth/slack/callback`;
+  // Prefer APP_BASE_URL (production domain) over REPLIT_DOMAINS (dev *.replit.dev domain)
+  const base =
+    process.env["APP_BASE_URL"] ??
+    `https://${process.env["REPLIT_DOMAINS"]?.split(",")[0] ?? "localhost:5000"}`;
+  return `${base.replace(/\/$/, "")}/api/auth/slack/callback`;
 }
 
 router.get("/auth/slack", (req, res) => {
   const clientId = process.env["SLACK_CLIENT_ID"];
   if (!clientId) {
-    res.status(503).json({ error: "Slack OAuth not configured (missing SLACK_CLIENT_ID)" });
+    logger.error("SLACK_CLIENT_ID not configured — cannot initiate Slack OAuth");
+    res.redirect("/app/login?error=config");
     return;
   }
 

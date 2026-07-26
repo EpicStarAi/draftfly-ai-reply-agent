@@ -12,6 +12,7 @@ export default function Login() {
     token: "Could not exchange Slack code. Please try again.",
     identity: "Could not fetch your Slack identity. Please try again.",
     server: "Server error during sign-in. Please try again.",
+    config: "Sign-in is not available right now. Please contact the administrator.",
   };
 
   const errorMsg = errorCode ? (errorMessages[errorCode] ?? "Unknown error.") : null;
