@@ -3,47 +3,147 @@ import { useEffect, useRef } from "react";
 
 function GlowCanvas() {
   const ref = useRef<HTMLCanvasElement>(null);
+  const animRef = useRef<number>(0);
 
   useEffect(() => {
     const canvas = ref.current;
     if (!canvas) return;
     const ctx = canvas.getContext("2d")!;
-    let frame = 0;
+    let t = 0;
 
-    const draw = () => {
+    const resize = () => {
       canvas.width = canvas.offsetWidth;
       canvas.height = canvas.offsetHeight;
-      const W = canvas.width, H = canvas.height;
-
-      ctx.clearRect(0, 0, W, H);
-
-      // blob 1 — large leftish
-      const g1 = ctx.createRadialGradient(W * 0.35, H * 0.42, 0, W * 0.35, H * 0.42, W * 0.42);
-      g1.addColorStop(0, "rgba(30,130,255,0.55)");
-      g1.addColorStop(0.4, "rgba(0,90,220,0.3)");
-      g1.addColorStop(1, "rgba(0,0,0,0)");
-      ctx.fillStyle = g1;
-      ctx.fillRect(0, 0, W, H);
-
-      // blob 2 — right lower
-      const g2 = ctx.createRadialGradient(W * 0.72, H * 0.65, 0, W * 0.72, H * 0.65, W * 0.34);
-      g2.addColorStop(0, "rgba(0,160,255,0.45)");
-      g2.addColorStop(0.5, "rgba(10,80,200,0.2)");
-      g2.addColorStop(1, "rgba(0,0,0,0)");
-      ctx.fillStyle = g2;
-      ctx.fillRect(0, 0, W, H);
-
-      // blob 3 — top center (the curling arm)
-      const g3 = ctx.createRadialGradient(W * 0.5, H * 0.1, 0, W * 0.5, H * 0.1, W * 0.28);
-      g3.addColorStop(0, "rgba(20,100,255,0.35)");
-      g3.addColorStop(1, "rgba(0,0,0,0)");
-      ctx.fillStyle = g3;
-      ctx.fillRect(0, 0, W, H);
     };
 
+    const blob = (
+      cx: number, cy: number, r: number,
+      inner: string, mid: string, outer: string,
+      alpha = 1
+    ) => {
+      const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
+      g.addColorStop(0,   inner);
+      g.addColorStop(0.35, mid);
+      g.addColorStop(0.7, outer);
+      g.addColorStop(1,   "rgba(0,0,0,0)");
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.globalAlpha = 1;
+    };
+
+    const draw = () => {
+      resize();
+      const W = canvas.width, H = canvas.height;
+      ctx.clearRect(0, 0, W, H);
+
+      const s = (v: number, amp: number, speed: number) =>
+        v + Math.sin(t * speed) * amp;
+      const c = (v: number, amp: number, speed: number) =>
+        v + Math.cos(t * speed) * amp;
+
+      // ── Layer 1: deep background pools (far, dark) ──
+      // deep navy pool — top right
+      blob(
+        W * 0.78, H * 0.15, W * 0.55,
+        "rgba(5,20,80,0.9)",
+        "rgba(8,30,110,0.5)",
+        "rgba(0,10,40,0.15)",
+        0.9
+      );
+      // deep indigo — bottom left
+      blob(
+        W * 0.12, H * 0.85, W * 0.48,
+        "rgba(20,10,90,0.85)",
+        "rgba(30,15,100,0.4)",
+        "rgba(0,0,0,0)",
+        0.8
+      );
+
+      // ── Layer 2: mid-depth royal blue volumes ──
+      // large left core
+      blob(
+        s(W * 0.3, W * 0.03, 0.4), s(H * 0.48, H * 0.04, 0.3),
+        W * 0.48,
+        "rgba(20,90,255,0.65)",
+        "rgba(10,60,200,0.35)",
+        "rgba(0,20,80,0.08)"
+      );
+      // sweeping right arm
+      blob(
+        c(W * 0.7, W * 0.04, 0.35), s(H * 0.35, H * 0.05, 0.45),
+        W * 0.38,
+        "rgba(0,110,240,0.5)",
+        "rgba(5,70,190,0.25)",
+        "rgba(0,0,0,0)"
+      );
+      // top curl
+      blob(
+        s(W * 0.52, W * 0.05, 0.5), c(H * 0.08, H * 0.04, 0.4),
+        W * 0.32,
+        "rgba(30,120,255,0.45)",
+        "rgba(15,80,210,0.2)",
+        "rgba(0,0,0,0)"
+      );
+
+      // ── Layer 3: bright cyan/electric highlights (close, intense) ──
+      // central hot spot
+      blob(
+        s(W * 0.42, W * 0.025, 0.7), c(H * 0.42, H * 0.03, 0.6),
+        W * 0.18,
+        "rgba(80,180,255,0.75)",
+        "rgba(40,140,255,0.35)",
+        "rgba(10,80,220,0.05)"
+      );
+      // secondary cyan flare — upper right
+      blob(
+        c(W * 0.68, W * 0.03, 0.55), s(H * 0.22, H * 0.04, 0.48),
+        W * 0.14,
+        "rgba(60,200,255,0.6)",
+        "rgba(20,150,240,0.28)",
+        "rgba(0,0,0,0)"
+      );
+      // lower teal glint
+      blob(
+        s(W * 0.58, W * 0.02, 0.62), c(H * 0.7, H * 0.03, 0.52),
+        W * 0.12,
+        "rgba(0,220,210,0.4)",
+        "rgba(0,160,180,0.18)",
+        "rgba(0,0,0,0)"
+      );
+
+      // ── Layer 4: ultra-bright core pinpoint ──
+      blob(
+        s(W * 0.38, W * 0.015, 0.9), s(H * 0.4, H * 0.02, 0.8),
+        W * 0.07,
+        "rgba(160,220,255,0.85)",
+        "rgba(80,170,255,0.4)",
+        "rgba(0,0,0,0)"
+      );
+
+      // ── Layer 5: ambient scatter — tiny specks of light ──
+      for (let i = 0; i < 4; i++) {
+        const ang = t * 0.2 + (i * Math.PI * 2) / 4;
+        const rx = W * 0.44 + Math.cos(ang) * W * 0.22;
+        const ry = H * 0.44 + Math.sin(ang) * H * 0.18;
+        blob(rx, ry, W * 0.04,
+          "rgba(120,200,255,0.3)",
+          "rgba(60,160,255,0.12)",
+          "rgba(0,0,0,0)"
+        );
+      }
+
+      t += 0.004;
+      animRef.current = requestAnimationFrame(draw);
+    };
+
+    resize();
     draw();
-    window.addEventListener("resize", draw);
-    return () => window.removeEventListener("resize", draw);
+    window.addEventListener("resize", resize);
+    return () => {
+      cancelAnimationFrame(animRef.current);
+      window.removeEventListener("resize", resize);
+    };
   }, []);
 
   return <canvas ref={ref} className="dg-canvas" />;
