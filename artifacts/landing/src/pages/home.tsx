@@ -281,9 +281,9 @@ export default function Home() {
 
       {/* Navigation */}
       <nav className="fixed top-0 left-0 right-0 z-50 border-b border-white/5 bg-background/80 backdrop-blur-md">
-        <div className="container mx-auto px-6 h-16 flex items-center justify-between">
+        <div className="container mx-auto px-6 h-20 flex items-center justify-between">
           <div className="flex items-center">
-            <img src="/logo.png" alt="DraftFly" className="h-7 w-auto" />
+            <img src="/logo-nav.png" alt="DraftFly" className="h-10 w-auto" />
           </div>
           <div className="flex items-center gap-3">
             {/* Theme toggle */}
