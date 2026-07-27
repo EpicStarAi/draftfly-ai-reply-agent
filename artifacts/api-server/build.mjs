@@ -130,7 +130,18 @@ globalThis.__dirname = __bannerPath.dirname(globalThis.__filename);
   await copyFile(tableSqlSrc, tableSqlDst);
 }
 
-buildAll().catch((err) => {
-  console.error(err);
-  process.exit(1);
-});
+// Copy connect-pg-simple's table.sql into dist so the bundled server can find
+// it at __dirname/table.sql when createTableIfMissing is true.
+async function copyAssets(distDir) {
+  const tableSqlSrc = createRequire(import.meta.url).resolve(
+    "connect-pg-simple/table.sql"
+  );
+  await copyFile(tableSqlSrc, path.join(distDir, "table.sql"));
+}
+
+buildAll()
+  .then(() => copyAssets(path.resolve(artifactDir, "dist")))
+  .catch((err) => {
+    console.error(err);
+    process.exit(1);
+  });
