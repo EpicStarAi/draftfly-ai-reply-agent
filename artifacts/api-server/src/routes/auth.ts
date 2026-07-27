@@ -44,7 +44,16 @@ router.get("/auth/slack", (req, res) => {
     state,
   });
 
-  res.redirect(`https://slack.com/oauth/v2/authorize?${params}`);
+  // Explicitly save session before redirecting so oauthState is persisted
+  // to the DB before Slack sends the callback (eliminates save-race condition)
+  req.session.save((err) => {
+    if (err) {
+      logger.error({ err }, "Failed to save session before Slack OAuth redirect");
+      res.redirect("/app/login?error=server");
+      return;
+    }
+    res.redirect(`https://slack.com/oauth/v2/authorize?${params}`);
+  });
 });
 
 router.get("/auth/slack/callback", async (req, res) => {

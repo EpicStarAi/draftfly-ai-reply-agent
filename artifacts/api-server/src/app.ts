@@ -10,6 +10,9 @@ import { WebhookHandlers } from "./webhookHandlers";
 const PgStore = connectPgSimple(session);
 const app: Express = express();
 
+// Trust Replit's reverse proxy so req.secure = true and secure cookies are set correctly
+app.set("trust proxy", 1);
+
 app.use(
   pinoHttp({
     logger,
