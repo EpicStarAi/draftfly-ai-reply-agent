@@ -17,6 +17,15 @@ export function getInitialFilters(search: string) {
   };
 }
 
+export function buildShareUrl(status: string, client: string, campaign: string): string {
+  const params = new URLSearchParams();
+  if (status !== "all") params.set("status", status);
+  if (client !== "all") params.set("clientId", client);
+  if (campaign !== "all") params.set("campaignId", campaign);
+  const qs = params.toString();
+  return `/reply-history${qs ? `?${qs}` : ""}`;
+}
+
 export default function ReplyHistoryPage() {
   const search = useSearch();
   const [, navigate] = useLocation();
@@ -30,13 +39,7 @@ export default function ReplyHistoryPage() {
 
   const syncToUrl = useCallback(
     (status: string, client: string, campaign: string) => {
-      const params = new URLSearchParams();
-      if (status !== "all") params.set("status", status);
-      if (client !== "all") params.set("clientId", client);
-      if (campaign !== "all") params.set("campaignId", campaign);
-      const qs = params.toString();
-      const newPath = `/reply-history${qs ? `?${qs}` : ""}`;
-      navigate(newPath, { replace: true });
+      navigate(buildShareUrl(status, client, campaign), { replace: true });
     },
     [navigate],
   );
@@ -52,6 +55,9 @@ export default function ReplyHistoryPage() {
   function handleClientChange(v: string) {
     setClientFilter(v);
     setCampaignFilter("all");
+    // Eagerly clear campaignId from the URL so a share taken immediately
+    // after a client switch never encodes a campaign from the previous client.
+    syncToUrl(statusFilter, v, "all");
   }
 
   const queryParams: Record<string, unknown> = {};

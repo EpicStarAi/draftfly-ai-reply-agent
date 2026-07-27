@@ -10,7 +10,7 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { getInitialFilters } from "./reply-history";
+import { getInitialFilters, buildShareUrl } from "./reply-history";
 
 describe("getInitialFilters — URL → dropdown state", () => {
   it("returns all-defaults when the search string is empty", () => {
@@ -78,6 +78,47 @@ describe("getInitialFilters — URL → dropdown state", () => {
 
   it("empty status param falls back to 'all'", () => {
     expect(getInitialFilters("status=").status).toBe("all");
+  });
+});
+
+describe("buildShareUrl — URL is clean after a client change", () => {
+  it("omits campaignId when campaign is 'all'", () => {
+    const url = buildShareUrl("all", "2", "all");
+    expect(url).not.toContain("campaignId");
+    expect(url).toContain("clientId=2");
+  });
+
+  it("omits campaignId when client changes away from the share-link client", () => {
+    // Simulates: share link had clientId=1&campaignId=7, user switches to client 2
+    const url = buildShareUrl("all", "2", "all");
+    expect(url).not.toContain("campaignId=7");
+    expect(url).not.toContain("campaignId");
+  });
+
+  it("includes campaignId when campaign is explicitly set", () => {
+    const url = buildShareUrl("all", "1", "7");
+    expect(url).toContain("clientId=1");
+    expect(url).toContain("campaignId=7");
+  });
+
+  it("returns bare path when all filters are 'all'", () => {
+    expect(buildShareUrl("all", "all", "all")).toBe("/reply-history");
+  });
+
+  it("includes only status when client and campaign are 'all'", () => {
+    const url = buildShareUrl("sent", "all", "all");
+    expect(url).toBe("/reply-history?status=sent");
+    expect(url).not.toContain("clientId");
+    expect(url).not.toContain("campaignId");
+  });
+
+  it("round-trips: getInitialFilters on buildShareUrl output recovers the same state", () => {
+    const url = buildShareUrl("sent", "3", "all");
+    const qs = url.split("?")[1] ?? "";
+    const filters = getInitialFilters(qs);
+    expect(filters.status).toBe("sent");
+    expect(filters.client).toBe("3");
+    expect(filters.campaign).toBe("all");
   });
 });
 
