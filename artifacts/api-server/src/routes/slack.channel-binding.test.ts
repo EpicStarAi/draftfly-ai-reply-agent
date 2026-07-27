@@ -50,6 +50,12 @@ const {
   mockPostEphemeral: vi.fn(() => Promise.resolve()),
 }));
 
+// These cases exercise endpoint behaviour, not the auth gate — let the operator
+// middleware through. Authorization itself is covered in operator-auth.test.ts.
+vi.mock("../middleware/requireOperator", () => ({
+  requireOperator: (_req: unknown, _res: unknown, next: () => void) => next(),
+}));
+
 vi.mock("drizzle-orm", () => ({
   eq: vi.fn((_col: unknown, _val: unknown) => ({ _col, _val })),
   and: vi.fn((...args: unknown[]) => ({ _and: args })),

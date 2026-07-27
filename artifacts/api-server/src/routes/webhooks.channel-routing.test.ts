@@ -42,6 +42,13 @@ const { clientRowRef, mockPostApprovalCard, mockGenerateDraftReply } = vi.hoiste
 
 // ─── Module mocks (hoisted by vitest) ────────────────────────────────────────
 
+// This test drives PATCH /api/clients/:id only to set up channel routing — it is
+// not exercising the auth gate, so let the operator middleware through. PATCH
+// authorization itself is covered in operator-auth.test.ts.
+vi.mock("../middleware/requireOperator", () => ({
+  requireOperator: (_req: unknown, _res: unknown, next: () => void) => next(),
+}));
+
 vi.mock("drizzle-orm", () => ({
   eq: vi.fn((_col: unknown, _val: unknown) => ({ _col, _val })),
   or: vi.fn((...args: unknown[]) => ({ args })),

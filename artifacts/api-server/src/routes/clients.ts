@@ -12,6 +12,7 @@ import {
   UpdateClientResponse,
   DeleteClientParams,
 } from "@workspace/api-zod";
+import { requireOperator } from "../middleware/requireOperator";
 
 const router: IRouter = Router();
 
@@ -44,7 +45,9 @@ router.get("/clients/:id", async (req, res): Promise<void> => {
   res.json(GetClientResponse.parse(client));
 });
 
-router.patch("/clients/:id", async (req, res): Promise<void> => {
+// Channel binding (and any client edit) is a write to operator config — gate it
+// behind the operator session, same as the Slack binding endpoints.
+router.patch("/clients/:id", requireOperator, async (req, res): Promise<void> => {
   const params = UpdateClientParams.safeParse(req.params);
   if (!params.success) {
     res.status(400).json({ error: params.error.message });
