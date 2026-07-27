@@ -227,6 +227,231 @@ export async function postTestMessage(channelId: string, botToken?: string): Pro
   }
 }
 
+// ─── Channel binding: workspace + channel discovery ─────────────────────────
+
+export interface SlackWorkspaceStatus {
+  connected: boolean;
+  teamName: string | null;
+  teamId: string | null;
+  url: string | null;
+  botUserId: string | null;
+  error: string | null;
+}
+
+/** OAuth/connection status via auth.test — used by the Slack Binding settings page. */
+export async function getWorkspaceStatus(botToken?: string): Promise<SlackWorkspaceStatus> {
+  const empty = { connected: false, teamName: null, teamId: null, url: null, botUserId: null };
+  if (!isSlackConfigured() && !botToken) {
+    return { ...empty, error: "SLACK_BOT_TOKEN and SLACK_SIGNING_SECRET are not configured" };
+  }
+  try {
+    const client = getClient(botToken);
+    const res = await client.auth.test();
+    return {
+      connected: true,
+      teamName: (res.team as string | undefined) ?? null,
+      teamId: (res.team_id as string | undefined) ?? null,
+      url: (res.url as string | undefined) ?? null,
+      botUserId: (res.user_id as string | undefined) ?? null,
+      error: null,
+    };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    logger.warn({ err }, "Slack auth.test failed");
+    return { ...empty, error: msg };
+  }
+}
+
+export interface SlackChannelSummary {
+  id: string;
+  name: string;
+  isPrivate: boolean;
+  isMember: boolean;
+  isArchived: boolean;
+}
+
+/**
+ * List channels the bot can see, so an operator can pick one by NAME instead of
+ * pasting a Channel ID. Requires the bot scopes `channels:read` (+ `groups:read`
+ * for private channels). Paginated; bot-member channels are sorted first.
+ */
+export async function listChannels(botToken?: string): Promise<SlackChannelSummary[]> {
+  const client = getClient(botToken); // throws a clear error if no token is configured
+  const channels: SlackChannelSummary[] = [];
+  let cursor: string | undefined;
+  // Cap pages defensively so a huge workspace can't spin forever.
+  for (let page = 0; page < 20; page++) {
+    const res = await client.conversations.list({
+      types: "public_channel,private_channel",
+      exclude_archived: false,
+      limit: 200,
+      cursor,
+    });
+    for (const c of res.channels ?? []) {
+      channels.push({
+        id: (c.id as string | undefined) ?? "",
+        name: (c.name as string | undefined) ?? "",
+        isPrivate: !!c.is_private,
+        isMember: !!c.is_member,
+        isArchived: !!c.is_archived,
+      });
+    }
+    cursor = res.response_metadata?.next_cursor || undefined;
+    if (!cursor) break;
+  }
+  channels.sort((a, b) =>
+    a.isMember === b.isMember ? a.name.localeCompare(b.name) : a.isMember ? -1 : 1,
+  );
+  return channels;
+}
+
+export interface SlackAccessCheckResult {
+  ok: boolean;
+  isMember: boolean;
+  name: string | null;
+  error: string | null;
+}
+
+/**
+ * Verify the bot can actually post to a channel BEFORE saving a binding. This is
+ * the guard against binding a channel in another workspace or one the bot isn't
+ * in: `conversations.info` only resolves channels in the bot's own workspace, and
+ * we require the bot to be a member (otherwise `chat.postMessage` would fail).
+ */
+export async function verifyBotAccess(channelId: string, botToken?: string): Promise<SlackAccessCheckResult> {
+  if (!isSlackConfigured() && !botToken) {
+    return { ok: false, isMember: false, name: null, error: "Slack is not configured" };
+  }
+  try {
+    const client = getClient(botToken);
+    const res = await client.conversations.info({ channel: channelId });
+    const ch = res.channel as { name?: string; is_member?: boolean; is_archived?: boolean } | undefined;
+    if (!ch) return { ok: false, isMember: false, name: null, error: "Channel not found in this workspace" };
+    if (ch.is_archived) {
+      return { ok: false, isMember: !!ch.is_member, name: ch.name ?? null, error: "Channel is archived" };
+    }
+    return {
+      ok: !!ch.is_member,
+      isMember: !!ch.is_member,
+      name: ch.name ?? null,
+      error: ch.is_member ? null : "Bot is not a member of this channel — invite it first",
+    };
+  } catch (err) {
+    // Slack returns `channel_not_found` when the ID isn't in the bot's workspace.
+    const msg = err instanceof Error ? err.message : String(err);
+    return { ok: false, isMember: false, name: null, error: msg };
+  }
+}
+
+/**
+ * Post a TEST-marked approval card with Send/Edit/Discard buttons. The actions
+ * block carries block_id `draft_test` and value `test`, which the interactions
+ * handler recognises and short-circuits — it never touches the DB or Lemlist, so
+ * clicking the buttons sends no real email.
+ */
+export async function postTestApprovalCard(
+  channelId: string,
+  botToken?: string,
+): Promise<{ ok: boolean; ts?: string; error?: string }> {
+  if (!isSlackConfigured() && !botToken) {
+    return { ok: false, error: "SLACK_BOT_TOKEN and SLACK_SIGNING_SECRET are not configured" };
+  }
+  try {
+    const client = getClient(botToken);
+    const result = await client.chat.postMessage({
+      channel: channelId,
+      text: "🧪 TEST — DraftFly approval card (no real reply will be sent)",
+      blocks: [
+        {
+          type: "section",
+          text: {
+            type: "mrkdwn",
+            text: "🧪 *TEST approval card* — DraftFly channel-binding check. These buttons are safe: clicking them sends *no* email and changes *no* draft.",
+          },
+        },
+        {
+          type: "section",
+          text: { type: "mrkdwn", text: "*New reply from Jane Tester* — Example Co" },
+        },
+        {
+          type: "section",
+          text: { type: "mrkdwn", text: '> _"Looks interesting — can you send over pricing?"_' },
+        },
+        {
+          type: "section",
+          text: {
+            type: "mrkdwn",
+            text: "*Claude Draft:*\nHi Jane, thanks for getting back to me! Happy to share pricing — do you have 10 minutes on Tuesday to walk through it?",
+          },
+        },
+        {
+          type: "context",
+          elements: [{ type: "mrkdwn", text: "#test-campaign · Persona: SDR · US · TEST" }],
+        },
+        { type: "divider" },
+        {
+          type: "actions",
+          block_id: "draft_test",
+          elements: [
+            {
+              type: "button",
+              text: { type: "plain_text", text: "✅ Send Reply" },
+              style: "primary",
+              action_id: "draft_send",
+              value: "test",
+            },
+            {
+              type: "button",
+              text: { type: "plain_text", text: "✏️ Edit Reply" },
+              action_id: "draft_edit",
+              value: "test",
+            },
+            {
+              type: "button",
+              text: { type: "plain_text", text: "🗑️ Discard" },
+              style: "danger",
+              action_id: "draft_discard",
+              value: "test",
+            },
+          ],
+        },
+      ],
+    });
+    return { ok: true, ts: result.ts };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    logger.error({ err }, "Slack test approval card failed");
+    return { ok: false, error: msg };
+  }
+}
+
+/** Update a TEST card in place after one of its buttons is clicked (no side effects). */
+export async function updateTestCardAfterAction(
+  channelId: string,
+  ts: string,
+  label: string,
+  operatorId?: string,
+  botToken?: string,
+): Promise<void> {
+  if (!isSlackConfigured() && !botToken) return;
+  const by = operatorId ? ` by <@${operatorId}>` : "";
+  const client = getClient(botToken);
+  await client.chat.update({
+    channel: channelId,
+    ts,
+    text: `🧪 TEST card — ${label} clicked`,
+    blocks: [
+      {
+        type: "section",
+        text: {
+          type: "mrkdwn",
+          text: `🧪 *TEST card* — *${label}* clicked${by}. No email was sent and no draft was changed. ✅ Channel binding works.`,
+        },
+      },
+    ],
+  });
+}
+
 export async function openEditModal(params: {
   triggerId: string;
   draftId: number;

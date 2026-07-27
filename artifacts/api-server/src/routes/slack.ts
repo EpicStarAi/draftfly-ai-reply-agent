@@ -11,9 +11,16 @@ import {
   postEphemeral,
   postEscalationAlert,
   isSlackConfigured,
+  getWorkspaceStatus,
+  listChannels,
+  verifyBotAccess,
+  postTestApprovalCard,
+  updateTestCardAfterAction,
 } from "../lib/slack";
+import { SendSlackTestCardBody } from "@workspace/api-zod";
 import { sendReply } from "../lib/lemlist";
 import { logger } from "../lib/logger";
+import { requireOperator } from "../middleware/requireOperator";
 
 const router: IRouter = Router();
 
@@ -440,7 +447,39 @@ router.post("/slack/actions", async (req, res): Promise<void> => {
     return;
   }
 
-  const action = actions[0];
+  const action = actions[0] as { action_id: string; value: string; block_id?: string };
+
+  // ── TEST approval card (from the Slack Binding settings page) ──────────────
+  // Recognised by block_id "draft_test" / value "test". Never touches the DB or
+  // Lemlist — it only acks so a reviewer can confirm the buttons render and fire.
+  if (action.block_id === "draft_test" || action.value === "test") {
+    res.status(200).json({});
+
+    const labelMap: Record<string, string> = {
+      draft_send: "Send Reply",
+      draft_edit: "Edit Reply",
+      draft_discard: "Discard",
+    };
+    const label = labelMap[action.action_id] ?? action.action_id;
+    const channelId = (payload.channel as { id?: string } | undefined)?.id;
+    const messageTs = (payload.message as { ts?: string } | undefined)?.ts;
+
+    if (channelId) {
+      void postEphemeral({
+        channelId,
+        userId,
+        text: `🧪 TEST card — you clicked *${label}*. No real email was sent and no draft was changed.`,
+      }).catch((err) => req.log.warn({ err }, "TEST card: postEphemeral failed"));
+    }
+    if (channelId && messageTs) {
+      void updateTestCardAfterAction(channelId, messageTs, label, userId).catch((err) =>
+        req.log.warn({ err }, "TEST card: updateTestCardAfterAction failed"),
+      );
+    }
+    req.log.info({ action: action.action_id, userId, teamId }, "Slack TEST card action — no side effects");
+    return;
+  }
+
   const draftId = parseInt(action.value, 10);
   if (isNaN(draftId)) {
     res.status(400).json({ error: "Invalid draft ID in action value" });
@@ -649,6 +688,57 @@ router.post("/slack/send-approval", async (req, res): Promise<void> => {
 
   req.log.info({ draftId: draft.id, ts, mock: !isSlackConfigured() }, "Approval card posted");
   res.json({ ok: true, ts, mock: !isSlackConfigured() });
+});
+
+// ─── Channel binding endpoints (Slack Binding settings page) ────────────────
+// All four are operator-only: they expose workspace metadata / channel lists /
+// a message-sending action, so they must never be public. `requireOperator`
+// reuses the production Slack OAuth session (401 no session, 403 wrong team).
+
+// GET /slack/workspace — OAuth/connection status + workspace name (server-side token only)
+router.get("/slack/workspace", requireOperator, async (_req, res): Promise<void> => {
+  const status = await getWorkspaceStatus();
+  res.json(status);
+});
+
+// GET /slack/channels — channels the bot can see, by name + Channel ID
+router.get("/slack/channels", requireOperator, async (req, res): Promise<void> => {
+  if (!isSlackConfigured()) {
+    res.status(503).json({
+      error: "Slack is not configured. Add SLACK_BOT_TOKEN and SLACK_SIGNING_SECRET to Replit Secrets.",
+    });
+    return;
+  }
+  try {
+    const channels = await listChannels();
+    res.json(channels);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    req.log.error({ err }, "Failed to list Slack channels");
+    res.status(502).json({ error: `Failed to list Slack channels: ${msg}` });
+  }
+});
+
+// GET /slack/verify-access?channelId=… — confirm the bot can post before saving
+router.get("/slack/verify-access", requireOperator, async (req, res): Promise<void> => {
+  const channelId = (req.query.channelId as string | undefined)?.trim();
+  if (!channelId) {
+    res.status(400).json({ error: "channelId is required" });
+    return;
+  }
+  const result = await verifyBotAccess(channelId);
+  res.json(result);
+});
+
+// POST /slack/test-approval-card — send a TEST-marked card to a channel
+router.post("/slack/test-approval-card", requireOperator, async (req, res): Promise<void> => {
+  const parsed = SendSlackTestCardBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(422).json({ error: "Validation failed", details: parsed.error.flatten() });
+    return;
+  }
+  const result = await postTestApprovalCard(parsed.data.channelId);
+  res.json(result);
 });
 
 export default router;

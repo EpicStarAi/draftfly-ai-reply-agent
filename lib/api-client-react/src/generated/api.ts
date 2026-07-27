@@ -45,7 +45,14 @@ import type {
   PersonaUpdate,
   ReplyTrendPoint,
   SetupItem,
-  SetupItemUpdate
+  SetupItemUpdate,
+  SlackAccessCheck,
+  SlackChannel,
+  SlackErrorResponse,
+  SlackTestCardInput,
+  SlackTestCardResult,
+  SlackWorkspaceStatus,
+  VerifySlackBotAccessParams
 } from './api.schemas';
 
 import { customFetch } from '../custom-fetch';
@@ -2207,4 +2214,312 @@ export function useGetReplyTrends<TData = Awaited<ReturnType<typeof getReplyTren
 
 
 
+
+export const getGetSlackWorkspaceUrl = () => {
+
+
+
+
+  return `/api/slack/workspace`
+}
+
+/**
+ * @summary Slack OAuth/connection status and workspace name (server-side token)
+ */
+export const getSlackWorkspace = async ( options?: RequestInit): Promise<SlackWorkspaceStatus> => {
+
+  return customFetch<SlackWorkspaceStatus>(getGetSlackWorkspaceUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetSlackWorkspaceQueryKey = () => {
+    return [
+    `/api/slack/workspace`
+    ] as const;
+    }
+
+
+export const getGetSlackWorkspaceQueryOptions = <TData = Awaited<ReturnType<typeof getSlackWorkspace>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getSlackWorkspace>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetSlackWorkspaceQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getSlackWorkspace>>> = ({ signal }) => getSlackWorkspace({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getSlackWorkspace>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetSlackWorkspaceQueryResult = NonNullable<Awaited<ReturnType<typeof getSlackWorkspace>>>
+export type GetSlackWorkspaceQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Slack OAuth/connection status and workspace name (server-side token)
+ */
+
+export function useGetSlackWorkspace<TData = Awaited<ReturnType<typeof getSlackWorkspace>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getSlackWorkspace>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetSlackWorkspaceQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getListSlackChannelsUrl = () => {
+
+
+
+
+  return `/api/slack/channels`
+}
+
+/**
+ * @summary List channels the bot can see (name + Channel ID), for binding
+ */
+export const listSlackChannels = async ( options?: RequestInit): Promise<SlackChannel[]> => {
+
+  return customFetch<SlackChannel[]>(getListSlackChannelsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListSlackChannelsQueryKey = () => {
+    return [
+    `/api/slack/channels`
+    ] as const;
+    }
+
+
+export const getListSlackChannelsQueryOptions = <TData = Awaited<ReturnType<typeof listSlackChannels>>, TError = ErrorType<SlackErrorResponse>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listSlackChannels>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListSlackChannelsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listSlackChannels>>> = ({ signal }) => listSlackChannels({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listSlackChannels>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListSlackChannelsQueryResult = NonNullable<Awaited<ReturnType<typeof listSlackChannels>>>
+export type ListSlackChannelsQueryError = ErrorType<SlackErrorResponse>
+
+
+/**
+ * @summary List channels the bot can see (name + Channel ID), for binding
+ */
+
+export function useListSlackChannels<TData = Awaited<ReturnType<typeof listSlackChannels>>, TError = ErrorType<SlackErrorResponse>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listSlackChannels>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListSlackChannelsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getVerifySlackBotAccessUrl = (params: VerifySlackBotAccessParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/slack/verify-access?${stringifiedParams}` : `/api/slack/verify-access`
+}
+
+/**
+ * @summary Verify the bot can post to a channel (membership + workspace) before saving
+ */
+export const verifySlackBotAccess = async (params: VerifySlackBotAccessParams, options?: RequestInit): Promise<SlackAccessCheck> => {
+
+  return customFetch<SlackAccessCheck>(getVerifySlackBotAccessUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getVerifySlackBotAccessQueryKey = (params?: VerifySlackBotAccessParams,) => {
+    return [
+    `/api/slack/verify-access`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getVerifySlackBotAccessQueryOptions = <TData = Awaited<ReturnType<typeof verifySlackBotAccess>>, TError = ErrorType<unknown>>(params: VerifySlackBotAccessParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof verifySlackBotAccess>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getVerifySlackBotAccessQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof verifySlackBotAccess>>> = ({ signal }) => verifySlackBotAccess(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof verifySlackBotAccess>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type VerifySlackBotAccessQueryResult = NonNullable<Awaited<ReturnType<typeof verifySlackBotAccess>>>
+export type VerifySlackBotAccessQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Verify the bot can post to a channel (membership + workspace) before saving
+ */
+
+export function useVerifySlackBotAccess<TData = Awaited<ReturnType<typeof verifySlackBotAccess>>, TError = ErrorType<unknown>>(
+ params: VerifySlackBotAccessParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof verifySlackBotAccess>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getVerifySlackBotAccessQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getSendSlackTestCardUrl = () => {
+
+
+
+
+  return `/api/slack/test-approval-card`
+}
+
+/**
+ * @summary Send a TEST-marked approval card (Send/Edit/Discard) to a channel
+ */
+export const sendSlackTestCard = async (slackTestCardInput: SlackTestCardInput, options?: RequestInit): Promise<SlackTestCardResult> => {
+
+  return customFetch<SlackTestCardResult>(getSendSlackTestCardUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(slackTestCardInput)
+  }
+);}
+
+
+
+
+export const getSendSlackTestCardMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof sendSlackTestCard>>, TError,{data: BodyType<SlackTestCardInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof sendSlackTestCard>>, TError,{data: BodyType<SlackTestCardInput>}, TContext> => {
+
+const mutationKey = ['sendSlackTestCard'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof sendSlackTestCard>>, {data: BodyType<SlackTestCardInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  sendSlackTestCard(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SendSlackTestCardMutationResult = NonNullable<Awaited<ReturnType<typeof sendSlackTestCard>>>
+    export type SendSlackTestCardMutationBody = BodyType<SlackTestCardInput>
+    export type SendSlackTestCardMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Send a TEST-marked approval card (Send/Edit/Discard) to a channel
+ */
+export const useSendSlackTestCard = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof sendSlackTestCard>>, TError,{data: BodyType<SlackTestCardInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof sendSlackTestCard>>,
+        TError,
+        {data: BodyType<SlackTestCardInput>},
+        TContext
+      > => {
+      return useMutation(getSendSlackTestCardMutationOptions(options));
+    }
 

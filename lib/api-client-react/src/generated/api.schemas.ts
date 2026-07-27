@@ -5,6 +5,61 @@
  * DraftFly API — AI-powered reply automation for B2B sales agencies
  * OpenAPI spec version: 0.2.0
  */
+export interface SlackWorkspaceStatus {
+  /** True when a server-side bot token + signing secret are configured and auth.test succeeds */
+  connected: boolean;
+  /** @nullable */
+  teamName?: string | null;
+  /** @nullable */
+  teamId?: string | null;
+  /** @nullable */
+  url?: string | null;
+  /** @nullable */
+  botUserId?: string | null;
+  /** @nullable */
+  error?: string | null;
+}
+
+export interface SlackChannel {
+  /** Slack Channel ID, e.g. C0BK6NPBHKJ */
+  id: string;
+  name: string;
+  isPrivate: boolean;
+  /** Whether the bot is a member of the channel */
+  isMember: boolean;
+  isArchived: boolean;
+}
+
+export interface SlackAccessCheck {
+  /** True when the channel exists in the bot's workspace and the bot can post */
+  ok: boolean;
+  isMember: boolean;
+  /** @nullable */
+  name?: string | null;
+  /** @nullable */
+  error?: string | null;
+}
+
+export interface SlackTestCardInput {
+  /**
+     * Slack Channel ID to send the test card to
+     * @pattern ^[CG][A-Z0-9]{9,}$
+     */
+  channelId: string;
+}
+
+export interface SlackTestCardResult {
+  ok: boolean;
+  /** @nullable */
+  ts?: string | null;
+  /** @nullable */
+  error?: string | null;
+}
+
+export interface SlackErrorResponse {
+  error: string;
+}
+
 export interface HealthStatus {
   status: string;
 }
@@ -429,5 +484,9 @@ draftId?: number;
 export type GetReplyTrendsParams = {
 clientId?: number;
 campaignId?: number;
+};
+
+export type VerifySlackBotAccessParams = {
+channelId: string;
 };
 

@@ -645,3 +645,61 @@ export const GetReplyTrendsResponseItem = zod.object({
 export const GetReplyTrendsResponse = zod.array(GetReplyTrendsResponseItem)
 
 
+/**
+ * @summary Slack OAuth/connection status and workspace name (server-side token)
+ */
+export const GetSlackWorkspaceResponse = zod.object({
+  "connected": zod.boolean().describe('True when a server-side bot token + signing secret are configured and auth.test succeeds'),
+  "teamName": zod.string().nullish(),
+  "teamId": zod.string().nullish(),
+  "url": zod.string().nullish(),
+  "botUserId": zod.string().nullish(),
+  "error": zod.string().nullish()
+})
+
+
+/**
+ * @summary List channels the bot can see (name + Channel ID), for binding
+ */
+export const ListSlackChannelsResponseItem = zod.object({
+  "id": zod.string().describe('Slack Channel ID, e.g. C0BK6NPBHKJ'),
+  "name": zod.string(),
+  "isPrivate": zod.boolean(),
+  "isMember": zod.boolean().describe('Whether the bot is a member of the channel'),
+  "isArchived": zod.boolean()
+})
+export const ListSlackChannelsResponse = zod.array(ListSlackChannelsResponseItem)
+
+
+/**
+ * @summary Verify the bot can post to a channel (membership + workspace) before saving
+ */
+export const VerifySlackBotAccessQueryParams = zod.object({
+  "channelId": zod.coerce.string()
+})
+
+export const VerifySlackBotAccessResponse = zod.object({
+  "ok": zod.boolean().describe('True when the channel exists in the bot\'s workspace and the bot can post'),
+  "isMember": zod.boolean(),
+  "name": zod.string().nullish(),
+  "error": zod.string().nullish()
+})
+
+
+/**
+ * @summary Send a TEST-marked approval card (Send/Edit/Discard) to a channel
+ */
+export const sendSlackTestCardBodyChannelIdRegExp = new RegExp('^[CG][A-Z0-9]{9,}$');
+
+
+export const SendSlackTestCardBody = zod.object({
+  "channelId": zod.string().regex(sendSlackTestCardBodyChannelIdRegExp).describe('Slack Channel ID to send the test card to')
+})
+
+export const SendSlackTestCardResponse = zod.object({
+  "ok": zod.boolean(),
+  "ts": zod.string().nullish(),
+  "error": zod.string().nullish()
+})
+
+

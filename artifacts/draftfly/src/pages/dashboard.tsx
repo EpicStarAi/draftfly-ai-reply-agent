@@ -170,6 +170,12 @@ export default function Dashboard() {
     isPlaceholderChannel(c.slackChannel)
   );
 
+  // Slack workflow is "Connected" only when OAuth (token/signing secret) is
+  // configured AND channels are actually bound — i.e. no client is left on a
+  // placeholder channel that would mis-route replies.
+  const slackConnected =
+    !!integrations?.slack.configured && placeholderClients.length === 0;
+
   // Banner is dismissed when every current placeholder ID has been acknowledged.
   // New placeholder clients (IDs not yet acked) break through the dismissal.
   const [ackedIds, setAckedIds] = useState<Set<string>>(() => getAckedIds());
@@ -407,7 +413,7 @@ export default function Dashboard() {
                 <WorkflowStep
                   name="Slack"
                   icon={MessageSquare}
-                  connected={integrations?.slack.configured}
+                  connected={slackConnected}
                   loading={intLoading}
                   description="Operator approval"
                 />
