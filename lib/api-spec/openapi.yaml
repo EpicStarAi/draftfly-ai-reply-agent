@@ -16,6 +16,7 @@ tags:
   - name: logs
   - name: setup
   - name: dashboard
+  - name: slack
 
 paths:
   /healthz:
@@ -582,8 +583,158 @@ paths:
                 items:
                   $ref: "#/components/schemas/ReplyTrendPoint"
 
+  # ---------- SLACK CHANNEL BINDING ----------
+  /slack/workspace:
+    get:
+      operationId: getSlackWorkspace
+      tags: [slack]
+      summary: Slack OAuth/connection status and workspace name (server-side token)
+      responses:
+        "200":
+          description: Slack workspace status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SlackWorkspaceStatus"
+
+  /slack/channels:
+    get:
+      operationId: listSlackChannels
+      tags: [slack]
+      summary: List channels the bot can see (name + Channel ID), for binding
+      responses:
+        "200":
+          description: Available Slack channels
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SlackChannel"
+        "503":
+          description: Slack not configured
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SlackErrorResponse"
+
+  /slack/verify-access:
+    get:
+      operationId: verifySlackBotAccess
+      tags: [slack]
+      summary: Verify the bot can post to a channel (membership + workspace) before saving
+      parameters:
+        - name: channelId
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Access check result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SlackAccessCheck"
+
+  /slack/test-approval-card:
+    post:
+      operationId: sendSlackTestCard
+      tags: [slack]
+      summary: Send a TEST-marked approval card (Send/Edit/Discard) to a channel
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SlackTestCardInput"
+      responses:
+        "200":
+          description: Test card result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SlackTestCardResult"
+
 components:
   schemas:
+    # ---- Slack channel binding ----
+    SlackWorkspaceStatus:
+      type: object
+      required: [connected]
+      properties:
+        connected:
+          type: boolean
+          description: True when a server-side bot token + signing secret are configured and auth.test succeeds
+        teamName:
+          type: ["string", "null"]
+        teamId:
+          type: ["string", "null"]
+        url:
+          type: ["string", "null"]
+        botUserId:
+          type: ["string", "null"]
+        error:
+          type: ["string", "null"]
+
+    SlackChannel:
+      type: object
+      required: [id, name, isPrivate, isMember, isArchived]
+      properties:
+        id:
+          type: string
+          description: Slack Channel ID, e.g. C0BK6NPBHKJ
+        name:
+          type: string
+        isPrivate:
+          type: boolean
+        isMember:
+          type: boolean
+          description: Whether the bot is a member of the channel
+        isArchived:
+          type: boolean
+
+    SlackAccessCheck:
+      type: object
+      required: [ok, isMember]
+      properties:
+        ok:
+          type: boolean
+          description: True when the channel exists in the bot's workspace and the bot can post
+        isMember:
+          type: boolean
+        name:
+          type: ["string", "null"]
+        error:
+          type: ["string", "null"]
+
+    SlackTestCardInput:
+      type: object
+      required: [channelId]
+      properties:
+        channelId:
+          type: string
+          pattern: "^[CG][A-Z0-9]{9,}$"
+          description: Slack Channel ID to send the test card to
+
+    SlackTestCardResult:
+      type: object
+      required: [ok]
+      properties:
+        ok:
+          type: boolean
+        ts:
+          type: ["string", "null"]
+        error:
+          type: ["string", "null"]
+
+    SlackErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+
     HealthStatus:
       type: object
       properties:
