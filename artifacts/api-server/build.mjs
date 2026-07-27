@@ -3,7 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { build as esbuild } from "esbuild";
 import esbuildPluginPino from "esbuild-plugin-pino";
-import { rm } from "node:fs/promises";
+import { rm, copyFile } from "node:fs/promises";
 
 // Plugins (e.g. 'esbuild-plugin-pino') may use `require` to resolve dependencies
 globalThis.require = createRequire(import.meta.url);
@@ -13,6 +13,13 @@ const artifactDir = path.dirname(fileURLToPath(import.meta.url));
 async function buildAll() {
   const distDir = path.resolve(artifactDir, "dist");
   await rm(distDir, { recursive: true, force: true });
+
+  // Resolve connect-pg-simple's table.sql — after bundling, __dirname points to
+  // dist/, so we copy the file there so createTableIfMissing can find it.
+  const _require = createRequire(import.meta.url);
+  const pgSimpleDir = path.dirname(_require.resolve("connect-pg-simple"));
+  const tableSqlSrc = path.join(pgSimpleDir, "table.sql");
+  const tableSqlDst = path.join(distDir, "table.sql");
 
   await esbuild({
     entryPoints: [path.resolve(artifactDir, "src/index.ts")],
@@ -118,6 +125,9 @@ globalThis.__dirname = __bannerPath.dirname(globalThis.__filename);
     `,
     },
   });
+
+  // Copy table.sql into dist/ so connect-pg-simple's createTableIfMissing works
+  await copyFile(tableSqlSrc, tableSqlDst);
 }
 
 buildAll().catch((err) => {
