@@ -9,6 +9,8 @@ export default defineConfig({
     baseURL: process.env["BASE_URL"] ?? "http://localhost:80",
     headless: true,
   },
-  // No tsconfig here — e2e specs only use @playwright/test and Node built-ins,
-  // so the default transpiler handles them without the workspace tsconfig.
+  // Use the e2e-specific tsconfig to avoid resolving workspace project references
+  // (the main tsconfig.json references ../../lib/api-client-react which Playwright
+  // cannot resolve). tsconfig.e2e.json is a flat config with only node/esnext types.
+  tsconfig: "./tsconfig.e2e.json",
 });
