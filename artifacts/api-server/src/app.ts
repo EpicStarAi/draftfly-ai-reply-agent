@@ -1,3 +1,4 @@
+import path from "node:path";
 import express, { type Express, type Request, type Response } from "express";
 import cors from "cors";
 import pinoHttp from "pino-http";
@@ -92,5 +93,33 @@ app.use(express.urlencoded({
 }));
 
 app.use("/api", router);
+
+// Single-server (VPS/Docker) deployments: on Replit each artifact is served by
+// the platform router, but on a VPS the API server also serves the built
+// frontends. Set STATIC_APP_DIR / STATIC_LANDING_DIR to the vite build output
+// dirs to enable; unset (the Replit case) this block is a no-op.
+const staticAppDir = process.env["STATIC_APP_DIR"];
+const staticLandingDir = process.env["STATIC_LANDING_DIR"];
+
+if (staticAppDir) {
+  const appIndex = path.resolve(staticAppDir, "index.html");
+  app.use("/app", express.static(path.resolve(staticAppDir)));
+  // SPA fallback for client-side routes like /app/drafts
+  app.use("/app", (_req, res) => {
+    res.sendFile(appIndex);
+  });
+}
+
+if (staticLandingDir) {
+  const landingIndex = path.resolve(staticLandingDir, "index.html");
+  app.use(express.static(path.resolve(staticLandingDir)));
+  app.use((req, res, next) => {
+    if (req.method !== "GET" || req.path.startsWith("/api")) {
+      next();
+      return;
+    }
+    res.sendFile(landingIndex);
+  });
+}
 
 export default app;

@@ -196,7 +196,7 @@ describe("sweepStaleDrafts", () => {
     it("inserts an activity row after a successful update", async () => {
       await sweepStaleDrafts();
       expect(mockInsertValues).toHaveBeenCalledTimes(1);
-      const activityArg = mockInsertValues.mock.calls[0]?.[0] as Record<string, unknown>;
+      const activityArg = (mockInsertValues.mock.calls as unknown[][])[0]?.[0] as Record<string, unknown>;
       expect(activityArg.type).toBe("draft_send_failed");
       expect(activityArg.draftId).toBe(staleDraftPosted.id);
     });
@@ -225,7 +225,7 @@ describe("sweepStaleDrafts", () => {
       await sweepStaleDrafts();
 
       expect(mockPostMessage).toHaveBeenCalledTimes(1);
-      const call = mockPostMessage.mock.calls[0]?.[0] as { channel: string; text: string };
+      const call = (mockPostMessage.mock.calls as unknown[][])[0]?.[0] as { channel: string; text: string };
       expect(call.channel).toBe("C_ALERTS");
       expect(call.text).toContain(String(staleDraftPosted.id));
     });
@@ -263,7 +263,7 @@ describe("sweepStaleDrafts", () => {
     it("inserts an activity row for the orphaned draft", async () => {
       await sweepStaleDrafts();
       expect(mockInsertValues).toHaveBeenCalledTimes(1);
-      const arg = mockInsertValues.mock.calls[0]?.[0] as Record<string, unknown>;
+      const arg = (mockInsertValues.mock.calls as unknown[][])[0]?.[0] as Record<string, unknown>;
       expect(arg.draftId).toBe(staleDraftOrphan.id);
     });
 
