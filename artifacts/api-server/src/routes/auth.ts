@@ -1,6 +1,5 @@
 import { Router } from "express";
-import { WebClient } from "@slack/web-api";
-import { createHmac } from "crypto";
+import { createHmac, randomBytes } from "crypto";
 import { logger } from "../lib/logger";
 
 declare module "express-session" {
@@ -13,6 +12,7 @@ declare module "express-session" {
       avatar?: string;
     };
     oauthState?: string;
+    oauthNonce?: string;
   }
 }
 
@@ -26,6 +26,10 @@ function getRedirectUri(): string {
   return `${base.replace(/\/$/, "")}/api/auth/slack/callback`;
 }
 
+// Sign in with Slack uses Slack's OpenID Connect flow. The legacy identity.*
+// user scopes are no longer granted to new Slack apps, so oauth/v2/authorize
+// with user_scope=identity.basic fails with invalid_scope at Slack's consent
+// screen. OIDC (scope: openid profile email) is the supported replacement.
 router.get("/auth/slack", (req, res) => {
   const clientId = process.env["SLACK_CLIENT_ID"];
   if (!clientId) {
@@ -34,14 +38,18 @@ router.get("/auth/slack", (req, res) => {
     return;
   }
 
-  const state = Math.random().toString(36).slice(2);
+  const state = randomBytes(16).toString("hex");
+  const nonce = randomBytes(16).toString("hex");
   req.session["oauthState"] = state;
+  req.session["oauthNonce"] = nonce;
 
   const params = new URLSearchParams({
+    response_type: "code",
     client_id: clientId,
-    user_scope: "identity.basic,identity.email,identity.avatar",
+    scope: "openid profile email",
     redirect_uri: getRedirectUri(),
     state,
+    nonce,
   });
 
   // Explicitly save session before redirecting so oauthState is persisted
@@ -52,9 +60,32 @@ router.get("/auth/slack", (req, res) => {
       res.redirect("/app/login?error=server");
       return;
     }
-    res.redirect(`https://slack.com/oauth/v2/authorize?${params}`);
+    res.redirect(`https://slack.com/openid/connect/authorize?${params}`);
   });
 });
+
+interface SlackIdTokenClaims {
+  sub?: string;
+  nonce?: string;
+  name?: string;
+  email?: string;
+  picture?: string;
+  "https://slack.com/user_id"?: string;
+  "https://slack.com/team_id"?: string;
+  "https://slack.com/user_image_48"?: string;
+}
+
+function decodeIdToken(idToken: string): SlackIdTokenClaims | null {
+  try {
+    const payload = idToken.split(".")[1];
+    if (!payload) return null;
+    return JSON.parse(
+      Buffer.from(payload, "base64url").toString("utf8"),
+    ) as SlackIdTokenClaims;
+  } catch {
+    return null;
+  }
+}
 
 router.get("/auth/slack/callback", async (req, res) => {
   const clientId = process.env["SLACK_CLIENT_ID"];
@@ -73,17 +104,18 @@ router.get("/auth/slack/callback", async (req, res) => {
     return;
   }
 
-  if (state !== req.session["oauthState"]) {
+  if (!state || state !== req.session["oauthState"]) {
     logger.warn("Slack OAuth state mismatch");
     res.redirect("/app/login?error=state");
     return;
   }
 
   try {
-    const tokenResp = await fetch("https://slack.com/api/oauth.v2.access", {
+    const tokenResp = await fetch("https://slack.com/api/openid.connect.token", {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({
+        grant_type: "authorization_code",
         client_id: clientId,
         client_secret: clientSecret,
         code,
@@ -93,37 +125,62 @@ router.get("/auth/slack/callback", async (req, res) => {
 
     const tokenData = (await tokenResp.json()) as {
       ok: boolean;
-      authed_user?: { id: string; access_token: string };
+      id_token?: string;
       error?: string;
     };
 
-    if (!tokenData.ok || !tokenData.authed_user?.access_token) {
+    if (!tokenData.ok || !tokenData.id_token) {
       logger.error({ slackError: tokenData.error }, "Slack token exchange failed");
       res.redirect("/app/login?error=token");
       return;
     }
 
-    const client = new WebClient(tokenData.authed_user.access_token);
-    const identity = await client.users.identity({});
+    // The id_token comes straight from Slack's token endpoint over TLS, so
+    // decoding without signature verification is safe; nonce is still checked.
+    const claims = decodeIdToken(tokenData.id_token);
+    if (!claims) {
+      logger.error("Failed to decode Slack id_token");
+      res.redirect("/app/login?error=identity");
+      return;
+    }
 
-    if (!identity.ok || !identity.user) {
-      logger.error("Failed to fetch Slack user identity");
+    if (!claims.nonce || claims.nonce !== req.session["oauthNonce"]) {
+      logger.warn("Slack OAuth nonce mismatch");
+      res.redirect("/app/login?error=state");
+      return;
+    }
+
+    const userId = claims["https://slack.com/user_id"] ?? claims.sub;
+    if (!userId) {
+      logger.error("Slack id_token missing user id");
       res.redirect("/app/login?error=identity");
       return;
     }
 
     req.session.user = {
-      id: identity.user.id ?? tokenData.authed_user.id,
-      name: identity.user.name ?? "Unknown",
-      email: (identity.user as { email?: string }).email ?? "",
-      teamId: identity.team?.id ?? "",
-      avatar: (identity.user as { image_48?: string }).image_48,
+      id: userId,
+      name: claims.name ?? "Unknown",
+      email: claims.email ?? "",
+      teamId: claims["https://slack.com/team_id"] ?? "",
+      avatar: claims["https://slack.com/user_image_48"] ?? claims.picture,
     };
 
     delete req.session["oauthState"];
+    delete req.session["oauthNonce"];
 
-    logger.info({ userId: req.session.user.id }, "User logged in via Slack");
-    res.redirect("/app");
+    logger.info({ userId }, "User logged in via Slack");
+
+    // Save before redirecting: express-session persists asynchronously at
+    // response end, so without an explicit save the browser can hit
+    // /api/auth/me before the session row exists and bounce back to /login.
+    req.session.save((saveErr) => {
+      if (saveErr) {
+        logger.error({ err: saveErr }, "Failed to save session after Slack login");
+        res.redirect("/app/login?error=server");
+        return;
+      }
+      res.redirect("/app");
+    });
   } catch (err) {
     logger.error({ err }, "Slack OAuth callback error");
     res.redirect("/app/login?error=server");
