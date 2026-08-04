@@ -1,6 +1,9 @@
 # Build context is the repository root:
 #   docker build -f deploy/Dockerfile .
-FROM node:24-alpine AS build
+# node:24-slim (glibc), not alpine: the pnpm lockfile pins glibc builds of
+# rollup/esbuild native binaries; on musl the vite build fails with
+# "Cannot find module '@rollup/rollup-linux-x64-musl'"
+FROM node:24-slim AS build
 RUN npm install -g pnpm@10
 WORKDIR /repo
 COPY . .
@@ -12,7 +15,7 @@ RUN pnpm --filter @workspace/api-server run build
 RUN PORT=20302 BASE_PATH=/app pnpm --filter @workspace/draftfly run build
 RUN PORT=18150 BASE_PATH=/ pnpm --filter @workspace/landing run build
 
-FROM node:24-alpine AS runtime
+FROM node:24-slim AS runtime
 ENV NODE_ENV=production
 WORKDIR /srv
 COPY --from=build /repo/artifacts/api-server/dist ./api
