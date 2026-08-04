@@ -20,6 +20,9 @@ services:
       dockerfile: deploy/Dockerfile
     restart: unless-stopped
     env_file: .env
+    # Bound to localhost only — a host reverse proxy (nginx/Caddy) terminates TLS
+    ports:
+      - "127.0.0.1:8080:8080"
     environment:
       DATABASE_URL: postgres://draftfly:${POSTGRES_PASSWORD}@db:5432/draftfly
       PORT: "8080"
@@ -45,14 +48,18 @@ services:
       db:
         condition: service_healthy
 
+  # Optional TLS proxy for servers with free 80/443 ports:
+  #   docker compose --profile caddy up -d
+  # Skip it when the host already runs nginx — use deploy/nginx-draftfly.conf instead.
   caddy:
+    profiles: ["caddy"]
     image: caddy:2-alpine
     restart: unless-stopped
     ports:
       - "80:80"
       - "443:443"
     environment:
-      DOMAIN: ${DOMAIN:?set DOMAIN in deploy/.env}
+      DOMAIN: ${DOMAIN:-}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data

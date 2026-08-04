@@ -1,12 +1,12 @@
 # Деплой DraftFly на VPS
 
-Один Docker-стек: Node-контейнер (API + статика дашборда и лендинга), PostgreSQL и Caddy (автоматический HTTPS через Let's Encrypt).
+Один Docker-стек: Node-контейнер (API + статика дашборда и лендинга) и PostgreSQL. TLS-терминацию делает либо ваш существующий nginx на хосте (см. `deploy/nginx-draftfly.conf`), либо опциональный Caddy-контейнер (`--profile caddy`), если порты 80/443 свободны.
 
 ```
-Интернет ── Caddy (:80/:443, TLS) ── app (Node, :8080) ── db (Postgres 16)
-                                       ├─ /api/*  — Express API
-                                       ├─ /app/*  — дашборд (SPA)
-                                       └─ /*      — лендинг
+Интернет ── nginx или Caddy (:80/:443, TLS) ── app (Node, 127.0.0.1:8080) ── db (Postgres 16)
+                                                ├─ /api/*  — Express API
+                                                ├─ /app/*  — дашборд (SPA)
+                                                └─ /*      — лендинг
 ```
 
 HTTPS обязателен: cookie сессии ставится с флагом `secure`, и Slack принимает только https redirect URL. Поэтому нужен домен, направленный на VPS (A-запись), — по «голому» IP без TLS логин работать не будет.
@@ -58,11 +58,27 @@ docker compose build
 # Создать/обновить схему БД (одноразово и после изменений схемы)
 docker compose --profile setup run --rm migrate
 
-# Запустить
+# Запустить (app слушает 127.0.0.1:8080, наружу его выводит reverse-proxy)
 docker compose up -d
 
 # Логи
 docker compose logs -f app
+```
+
+### 4a. Если на сервере уже работает nginx (порты 80/443 заняты)
+
+```bash
+cp deploy/nginx-draftfly.conf /etc/nginx/sites-available/draftfly.conf
+ln -s /etc/nginx/sites-available/draftfly.conf /etc/nginx/sites-enabled/
+nginx -t && systemctl reload nginx
+# TLS-сертификат Let's Encrypt (добавит https и редирект сам):
+certbot --nginx -d draftfly.app -d www.draftfly.app
+```
+
+### 4b. Если порты 80/443 свободны — Caddy вместо nginx
+
+```bash
+docker compose --profile caddy up -d   # авто-HTTPS по DOMAIN из .env
 ```
 
 Проверка: `https://<домен>/` — лендинг, `https://<домен>/app` — дашборд (вход через Slack), `https://<домен>/api/healthz` — health-check.
