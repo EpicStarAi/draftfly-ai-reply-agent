@@ -1,5 +1,6 @@
 import { Router, type IRouter } from "express";
 import { isSlackConfigured, getSlackStatus, postTestMessage } from "../lib/slack";
+import { requireOperator } from "../middleware/requireOperator";
 import { isLemlistConfigured, isWebhookSecretConfigured, testConnection as testLemlist, getCampaigns } from "../lib/lemlist";
 import { isClaudeConfigured, testConnection as testClaude } from "../lib/claude";
 
@@ -39,7 +40,7 @@ async function pingN8n(): Promise<{ reachable: boolean; status?: number; error?:
 
 // ─── GET /integrations/status ──────────────────────────────────────────────
 
-router.get("/integrations/status", async (_req, res): Promise<void> => {
+router.get("/integrations/status", requireOperator, async (_req, res): Promise<void> => {
   const slackStatus = getSlackStatus();
   const dbOk = !!process.env.DATABASE_URL;
   const n8nUrl = getN8nWebhookUrl();
@@ -76,7 +77,7 @@ router.get("/integrations/status", async (_req, res): Promise<void> => {
 
 // ─── POST /integrations/test/slack ────────────────────────────────────────
 
-router.post("/integrations/test/slack", async (req, res): Promise<void> => {
+router.post("/integrations/test/slack", requireOperator, async (req, res): Promise<void> => {
   const channelId = (req.body as { channelId?: string }).channelId;
   if (!channelId) {
     res.status(400).json({ error: "channelId is required" });
@@ -88,14 +89,14 @@ router.post("/integrations/test/slack", async (req, res): Promise<void> => {
 
 // ─── POST /integrations/test/lemlist ──────────────────────────────────────
 
-router.post("/integrations/test/lemlist", async (_req, res): Promise<void> => {
+router.post("/integrations/test/lemlist", requireOperator, async (_req, res): Promise<void> => {
   const result = await testLemlist();
   res.json(result);
 });
 
 // ─── POST /integrations/test/claude ───────────────────────────────────────
 
-router.post("/integrations/test/claude", async (_req, res): Promise<void> => {
+router.post("/integrations/test/claude", requireOperator, async (_req, res): Promise<void> => {
   const result = await testClaude();
   res.json(result);
 });

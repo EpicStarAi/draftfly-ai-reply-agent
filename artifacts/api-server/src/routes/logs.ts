@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { eq, and, desc } from "drizzle-orm";
 import { db, logsTable } from "@workspace/db";
+import { requireOperator } from "../middleware/requireOperator";
 import {
   ListLogsQueryParams,
   ListLogsResponse,
@@ -10,7 +11,7 @@ import {
 
 const router: IRouter = Router();
 
-router.get("/logs", async (req, res): Promise<void> => {
+router.get("/logs", requireOperator, async (req, res): Promise<void> => {
   const query = ListLogsQueryParams.safeParse(req.query);
   if (!query.success) {
     res.status(400).json({ error: query.error.message });
@@ -27,7 +28,7 @@ router.get("/logs", async (req, res): Promise<void> => {
   res.json(ListLogsResponse.parse(logs));
 });
 
-router.get("/logs/:id", async (req, res): Promise<void> => {
+router.get("/logs/:id", requireOperator, async (req, res): Promise<void> => {
   const params = GetLogParams.safeParse(req.params);
   if (!params.success) {
     res.status(400).json({ error: params.error.message });

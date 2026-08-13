@@ -15,10 +15,11 @@ import {
   GetCampaignStatsParams,
   GetCampaignStatsResponse,
 } from "@workspace/api-zod";
+import { requireOperator } from "../middleware/requireOperator";
 
 const router: IRouter = Router();
 
-router.get("/campaigns", async (req, res): Promise<void> => {
+router.get("/campaigns", requireOperator, async (req, res): Promise<void> => {
   const query = ListCampaignsQueryParams.safeParse(req.query);
   if (!query.success) {
     res.status(400).json({ error: query.error.message });
@@ -30,7 +31,7 @@ router.get("/campaigns", async (req, res): Promise<void> => {
   res.json(ListCampaignsResponse.parse(campaigns));
 });
 
-router.post("/campaigns", async (req, res): Promise<void> => {
+router.post("/campaigns", requireOperator, async (req, res): Promise<void> => {
   const parsed = CreateCampaignBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
@@ -40,7 +41,7 @@ router.post("/campaigns", async (req, res): Promise<void> => {
   res.status(201).json(CreateCampaignResponse.parse(campaign));
 });
 
-router.get("/campaigns/:id", async (req, res): Promise<void> => {
+router.get("/campaigns/:id", requireOperator, async (req, res): Promise<void> => {
   const params = GetCampaignParams.safeParse(req.params);
   if (!params.success) {
     res.status(400).json({ error: params.error.message });
@@ -54,7 +55,7 @@ router.get("/campaigns/:id", async (req, res): Promise<void> => {
   res.json(GetCampaignResponse.parse(campaign));
 });
 
-router.patch("/campaigns/:id", async (req, res): Promise<void> => {
+router.patch("/campaigns/:id", requireOperator, async (req, res): Promise<void> => {
   const params = UpdateCampaignParams.safeParse(req.params);
   if (!params.success) {
     res.status(400).json({ error: params.error.message });
@@ -73,7 +74,7 @@ router.patch("/campaigns/:id", async (req, res): Promise<void> => {
   res.json(UpdateCampaignResponse.parse(campaign));
 });
 
-router.delete("/campaigns/:id", async (req, res): Promise<void> => {
+router.delete("/campaigns/:id", requireOperator, async (req, res): Promise<void> => {
   const params = DeleteCampaignParams.safeParse(req.params);
   if (!params.success) {
     res.status(400).json({ error: params.error.message });
@@ -87,7 +88,7 @@ router.delete("/campaigns/:id", async (req, res): Promise<void> => {
   res.sendStatus(204);
 });
 
-router.get("/campaigns/:id/stats", async (req, res): Promise<void> => {
+router.get("/campaigns/:id/stats", requireOperator, async (req, res): Promise<void> => {
   const params = GetCampaignStatsParams.safeParse(req.params);
   if (!params.success) {
     res.status(400).json({ error: params.error.message });

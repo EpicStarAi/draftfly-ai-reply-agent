@@ -16,12 +16,12 @@ import { requireOperator } from "../middleware/requireOperator";
 
 const router: IRouter = Router();
 
-router.get("/clients", async (req, res): Promise<void> => {
+router.get("/clients", requireOperator, async (req, res): Promise<void> => {
   const clients = await db.select().from(clientsTable).orderBy(clientsTable.createdAt);
   res.json(ListClientsResponse.parse(clients));
 });
 
-router.post("/clients", async (req, res): Promise<void> => {
+router.post("/clients", requireOperator, async (req, res): Promise<void> => {
   const parsed = CreateClientBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(422).json({ error: "Validation failed", details: parsed.error.flatten() });
@@ -31,7 +31,7 @@ router.post("/clients", async (req, res): Promise<void> => {
   res.status(201).json(CreateClientResponse.parse(client));
 });
 
-router.get("/clients/:id", async (req, res): Promise<void> => {
+router.get("/clients/:id", requireOperator, async (req, res): Promise<void> => {
   const params = GetClientParams.safeParse(req.params);
   if (!params.success) {
     res.status(400).json({ error: params.error.message });
@@ -70,7 +70,7 @@ router.patch("/clients/:id", requireOperator, async (req, res): Promise<void> =>
   res.json(UpdateClientResponse.parse(client));
 });
 
-router.delete("/clients/:id", async (req, res): Promise<void> => {
+router.delete("/clients/:id", requireOperator, async (req, res): Promise<void> => {
   const params = DeleteClientParams.safeParse(req.params);
   if (!params.success) {
     res.status(400).json({ error: params.error.message });

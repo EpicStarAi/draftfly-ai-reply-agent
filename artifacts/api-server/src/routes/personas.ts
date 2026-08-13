@@ -13,10 +13,11 @@ import {
   UpdatePersonaResponse,
   DeletePersonaParams,
 } from "@workspace/api-zod";
+import { requireOperator } from "../middleware/requireOperator";
 
 const router: IRouter = Router();
 
-router.get("/personas", async (req, res): Promise<void> => {
+router.get("/personas", requireOperator, async (req, res): Promise<void> => {
   const query = ListPersonasQueryParams.safeParse(req.query);
   if (!query.success) {
     res.status(400).json({ error: query.error.message });
@@ -28,7 +29,7 @@ router.get("/personas", async (req, res): Promise<void> => {
   res.json(ListPersonasResponse.parse(personas));
 });
 
-router.post("/personas", async (req, res): Promise<void> => {
+router.post("/personas", requireOperator, async (req, res): Promise<void> => {
   const parsed = CreatePersonaBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
@@ -38,7 +39,7 @@ router.post("/personas", async (req, res): Promise<void> => {
   res.status(201).json(CreatePersonaResponse.parse(persona));
 });
 
-router.get("/personas/:id", async (req, res): Promise<void> => {
+router.get("/personas/:id", requireOperator, async (req, res): Promise<void> => {
   const params = GetPersonaParams.safeParse(req.params);
   if (!params.success) {
     res.status(400).json({ error: params.error.message });
@@ -52,7 +53,7 @@ router.get("/personas/:id", async (req, res): Promise<void> => {
   res.json(GetPersonaResponse.parse(persona));
 });
 
-router.patch("/personas/:id", async (req, res): Promise<void> => {
+router.patch("/personas/:id", requireOperator, async (req, res): Promise<void> => {
   const params = UpdatePersonaParams.safeParse(req.params);
   if (!params.success) {
     res.status(400).json({ error: params.error.message });
@@ -71,7 +72,7 @@ router.patch("/personas/:id", async (req, res): Promise<void> => {
   res.json(UpdatePersonaResponse.parse(persona));
 });
 
-router.delete("/personas/:id", async (req, res): Promise<void> => {
+router.delete("/personas/:id", requireOperator, async (req, res): Promise<void> => {
   const params = DeletePersonaParams.safeParse(req.params);
   if (!params.success) {
     res.status(400).json({ error: params.error.message });
