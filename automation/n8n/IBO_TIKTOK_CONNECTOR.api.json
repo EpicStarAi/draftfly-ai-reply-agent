@@ -1,0 +1,13 @@
+{
+  "name": "SETUP — IBO TikTok Connector",
+  "nodes": [
+    {"parameters": {}, "id": "tt-001", "name": "Start TikTok setup", "type": "n8n-nodes-base.manualTrigger", "typeVersion": 1, "position": [0, 0]},
+    {"parameters": {}, "id": "tt-002", "name": "TikTok for Developers: select app", "type": "n8n-nodes-base.noOp", "typeVersion": 1, "position": [300, 0]},
+    {"parameters": {}, "id": "tt-003", "name": "Authorize OAuth and posting access", "type": "n8n-nodes-base.noOp", "typeVersion": 1, "position": [600, 0]},
+    {"parameters": {}, "id": "tt-004", "name": "Check video requirements: no publishing", "type": "n8n-nodes-base.noOp", "typeVersion": 1, "position": [900, 0]},
+    {"parameters": {}, "id": "tt-005", "name": "Approve test post and analytics", "type": "n8n-nodes-base.noOp", "typeVersion": 1, "position": [1200, 0]},
+    {"parameters": {"content": "## TikTok: безопасное подключение\n1. TikTok for Developers и приложение\n2. OAuth-авторизация и разрешение публикации\n3. Проверить требования к видео без публикации\n4. Одобрить тестовую публикацию\n\nТокены не передавать в чат. Публикация выключена.", "height": 220, "width": 580, "color": 3}, "id": "tt-099", "name": "TikTok setup note", "type": "n8n-nodes-base.stickyNote", "typeVersion": 1, "position": [250, -310]}
+  ],
+  "connections": {"Start TikTok setup": {"main": [[{"node": "TikTok for Developers: select app", "type": "main", "index": 0}]]}, "TikTok for Developers: select app": {"main": [[{"node": "Authorize OAuth and posting access", "type": "main", "index": 0}]]}, "Authorize OAuth and posting access": {"main": [[{"node": "Check video requirements: no publishing", "type": "main", "index": 0}]]}, "Check video requirements: no publishing": {"main": [[{"node": "Approve test post and analytics", "type": "main", "index": 0}]]}},
+  "settings": {"executionOrder": "v1"}
+}

@@ -1,0 +1,13 @@
+{
+  "name": "SETUP — IBO Facebook Page Connector",
+  "nodes": [
+    {"parameters": {}, "id": "fb-001", "name": "Start Facebook setup", "type": "n8n-nodes-base.manualTrigger", "typeVersion": 1, "position": [0, 0]},
+    {"parameters": {}, "id": "fb-002", "name": "Meta: select working Facebook Page", "type": "n8n-nodes-base.noOp", "typeVersion": 1, "position": [300, 0]},
+    {"parameters": {}, "id": "fb-003", "name": "Authorize official OAuth access", "type": "n8n-nodes-base.noOp", "typeVersion": 1, "position": [600, 0]},
+    {"parameters": {}, "id": "fb-004", "name": "Check access: no publishing", "type": "n8n-nodes-base.noOp", "typeVersion": 1, "position": [900, 0]},
+    {"parameters": {}, "id": "fb-005", "name": "Approve test post and analytics", "type": "n8n-nodes-base.noOp", "typeVersion": 1, "position": [1200, 0]},
+    {"parameters": {"content": "## Facebook Page: безопасное подключение\n1. Выбрать рабочую страницу в Meta\n2. Выполнить официальную OAuth-авторизацию\n3. Проверить доступ без публикации\n4. Одобрить тестовый пост\n\nТокены не передавать в чат. Публикация выключена.", "height": 220, "width": 580, "color": 4}, "id": "fb-099", "name": "Facebook setup note", "type": "n8n-nodes-base.stickyNote", "typeVersion": 1, "position": [250, -310]}
+  ],
+  "connections": {"Start Facebook setup": {"main": [[{"node": "Meta: select working Facebook Page", "type": "main", "index": 0}]]}, "Meta: select working Facebook Page": {"main": [[{"node": "Authorize official OAuth access", "type": "main", "index": 0}]]}, "Authorize official OAuth access": {"main": [[{"node": "Check access: no publishing", "type": "main", "index": 0}]]}, "Check access: no publishing": {"main": [[{"node": "Approve test post and analytics", "type": "main", "index": 0}]]}},
+  "settings": {"executionOrder": "v1"}
+}

@@ -1,0 +1,35 @@
+name: Import social connector setup
+
+on:
+  workflow_dispatch:
+    inputs:
+      workflow_file:
+        description: Connector setup to import into n8n
+        required: true
+        default: automation/n8n/IBO_FACEBOOK_PAGE_CONNECTOR.api.json
+        type: choice
+        options:
+          - automation/n8n/IBO_FACEBOOK_PAGE_CONNECTOR.api.json
+          - automation/n8n/IBO_PINTEREST_CONNECTOR.api.json
+          - automation/n8n/IBO_TIKTOK_CONNECTOR.api.json
+
+permissions:
+  contents: read
+
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - name: Import inactive workflow
+        env:
+          N8N_BASE_URL: ${{ secrets.N8N_BASE_URL }}
+          N8N_API_KEY: ${{ secrets.N8N_API_KEY }}
+          WORKFLOW_FILE: ${{ inputs.workflow_file }}
+        run: |
+          curl --fail-with-body --silent --show-error --request POST \
+            --header "Content-Type: application/json" \
+            --header "X-N8N-API-KEY: $N8N_API_KEY" \
+            --data-binary "@$WORKFLOW_FILE" \
+            "$N8N_BASE_URL/api/v1/workflows"

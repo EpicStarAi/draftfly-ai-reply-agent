@@ -1,0 +1,13 @@
+{
+  "name": "SETUP — IBO Pinterest Connector",
+  "nodes": [
+    {"parameters": {}, "id": "pin-001", "name": "Start Pinterest setup", "type": "n8n-nodes-base.manualTrigger", "typeVersion": 1, "position": [0, 0]},
+    {"parameters": {}, "id": "pin-002", "name": "Pinterest Business and developer app", "type": "n8n-nodes-base.noOp", "typeVersion": 1, "position": [300, 0]},
+    {"parameters": {}, "id": "pin-003", "name": "Authorize official OAuth access", "type": "n8n-nodes-base.noOp", "typeVersion": 1, "position": [600, 0]},
+    {"parameters": {}, "id": "pin-004", "name": "Choose board and check access", "type": "n8n-nodes-base.noOp", "typeVersion": 1, "position": [900, 0]},
+    {"parameters": {}, "id": "pin-005", "name": "Approve test Pin and analytics", "type": "n8n-nodes-base.noOp", "typeVersion": 1, "position": [1200, 0]},
+    {"parameters": {"content": "## Pinterest: безопасное подключение\n1. Pinterest Business и приложение разработчика\n2. Официальная OAuth-авторизация\n3. Выбрать доску, проверить доступ без публикации\n4. Одобрить тестовый Pin\n\nТокены не передавать в чат. Публикация выключена.", "height": 220, "width": 580, "color": 6}, "id": "pin-099", "name": "Pinterest setup note", "type": "n8n-nodes-base.stickyNote", "typeVersion": 1, "position": [250, -310]}
+  ],
+  "connections": {"Start Pinterest setup": {"main": [[{"node": "Pinterest Business and developer app", "type": "main", "index": 0}]]}, "Pinterest Business and developer app": {"main": [[{"node": "Authorize official OAuth access", "type": "main", "index": 0}]]}, "Authorize official OAuth access": {"main": [[{"node": "Choose board and check access", "type": "main", "index": 0}]]}, "Choose board and check access": {"main": [[{"node": "Approve test Pin and analytics", "type": "main", "index": 0}]]}},
+  "settings": {"executionOrder": "v1"}
+}
