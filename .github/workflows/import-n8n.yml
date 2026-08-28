@@ -6,10 +6,10 @@ on:
       workflow_file:
         description: Workflow JSON stored in this repository
         required: true
-        default: automation/n8n/IBO_SOCIAL_CONTROL_BOARD.json
+        default: automation/n8n/IBO_SOCIAL_CONTROL_BOARD.api.json
         type: choice
         options:
-          - automation/n8n/IBO_SOCIAL_CONTROL_BOARD.json
+          - automation/n8n/IBO_SOCIAL_CONTROL_BOARD.api.json
 
 permissions:
   contents: read
@@ -34,7 +34,7 @@ jobs:
           N8N_API_KEY: ${{ secrets.N8N_API_KEY }}
           WORKFLOW_FILE: ${{ inputs.workflow_file }}
         run: |
-          curl --fail --silent --show-error --request POST \
+          curl --fail-with-body --silent --show-error --request POST \
             --header "Content-Type: application/json" \
             --header "X-N8N-API-KEY: $N8N_API_KEY" \
             --data-binary "@$WORKFLOW_FILE" \
