@@ -1,0 +1,28 @@
+name: Deploy DraftFly
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: appleboy/ssh-action@v1.2.4
+        with:
+          host: ${{ secrets.DRAFTFLY_VPS_HOST }}
+          username: ${{ secrets.DRAFTFLY_VPS_USER }}
+          key: ${{ secrets.DRAFTFLY_VPS_SSH_KEY }}
+          script: |
+            set -e
+            cd ${{ secrets.DRAFTFLY_VPS_PATH }}
+            git pull --ff-only origin main
+            cd deploy
+            docker compose build app
+            docker compose --profile setup run --rm migrate
+            docker compose up -d
+            curl --fail --silent http://127.0.0.1:8080/api/healthz > /dev/null
