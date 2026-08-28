@@ -1,0 +1,41 @@
+{
+  "name": "CONTROL BOARD — IBO Social & Revenue",
+  "nodes": [
+    {"parameters": {}, "id": "c0a00000-0000-4000-8000-000000000001", "name": "Open control board", "type": "n8n-nodes-base.manualTrigger", "typeVersion": 1, "position": [0, 0]},
+    {"parameters": {}, "id": "c0a00000-0000-4000-8000-000000000002", "name": "Audit channels and access", "type": "n8n-nodes-base.noOp", "typeVersion": 1, "position": [240, 0]},
+    {"parameters": {}, "id": "c0a00000-0000-4000-8000-000000000003", "name": "Instagram — connected and publishing", "type": "n8n-nodes-base.noOp", "typeVersion": 1, "position": [520, -280]},
+    {"parameters": {}, "id": "c0a00000-0000-4000-8000-000000000004", "name": "Telegram — channel and bot ready", "type": "n8n-nodes-base.noOp", "typeVersion": 1, "position": [520, -140]},
+    {"parameters": {}, "id": "c0a00000-0000-4000-8000-000000000005", "name": "YouTube — OAuth exists, quota check", "type": "n8n-nodes-base.noOp", "typeVersion": 1, "position": [520, 0]},
+    {"parameters": {}, "id": "c0a00000-0000-4000-8000-000000000006", "name": "TikTok — connect official account", "type": "n8n-nodes-base.noOp", "typeVersion": 1, "position": [520, 140]},
+    {"parameters": {}, "id": "c0a00000-0000-4000-8000-000000000007", "name": "Facebook — connect official account", "type": "n8n-nodes-base.noOp", "typeVersion": 1, "position": [520, 280]},
+    {"parameters": {}, "id": "c0a00000-0000-4000-8000-000000000008", "name": "Content funnel — hooks, video, CTA", "type": "n8n-nodes-base.noOp", "typeVersion": 1, "position": [850, 0]},
+    {"parameters": {}, "id": "c0a00000-0000-4000-8000-000000000009", "name": "Approval center — owner decision", "type": "n8n-nodes-base.noOp", "typeVersion": 1, "position": [1120, 0]},
+    {"parameters": {}, "id": "c0a00000-0000-4000-8000-000000000010", "name": "Publish, comments and analytics", "type": "n8n-nodes-base.noOp", "typeVersion": 1, "position": [1390, 0]},
+    {"parameters": {}, "id": "c0a00000-0000-4000-8000-000000000011", "name": "Lead funnel — Telegram, site, brief", "type": "n8n-nodes-base.noOp", "typeVersion": 1, "position": [1660, 0]},
+    {"parameters": {}, "id": "c0a00000-0000-4000-8000-000000000012", "name": "Monetization — services, pilot waitlist", "type": "n8n-nodes-base.noOp", "typeVersion": 1, "position": [1930, 0]},
+    {"parameters": {}, "id": "c0a00000-0000-4000-8000-000000000013", "name": "Weekly report and next decision", "type": "n8n-nodes-base.noOp", "typeVersion": 1, "position": [2200, 0]},
+    {"parameters": {"content": "## 1. Каналы и доступы\n**Готово:** Instagram, Telegram\n**Проверить:** YouTube quota\n**Подключить:** TikTok, Facebook\n\nЗдесь нет публикации, пока нет официального подключения.", "height": 190, "width": 540, "color": 5}, "id": "c0a00000-0000-4000-8000-000000000014", "name": "Channel status", "type": "n8n-nodes-base.stickyNote", "typeVersion": 1, "position": [420, -500]},
+    {"parameters": {"content": "## 2. Контентная воронка\nВидео или пост → понятная польза → CTA → Telegram / freerus.site → бриф или заявка.\n\nВсе публикации проходят approval, прежде чем попасть наружу.", "height": 190, "width": 570, "color": 3}, "id": "c0a00000-0000-4000-8000-000000000015", "name": "Content funnel", "type": "n8n-nodes-base.stickyNote", "typeVersion": 1, "position": [800, -500]},
+    {"parameters": {"content": "## 3. Деньги и контроль\nМонетизация: услуги AI/SMM, заявки на аудит, VPN waitlist.\n\nПлатежи и обещания цен не автоматизируются без отдельного подтверждённого процесса.", "height": 190, "width": 620, "color": 6}, "id": "c0a00000-0000-4000-8000-000000000016", "name": "Revenue control", "type": "n8n-nodes-base.stickyNote", "typeVersion": 1, "position": [1660, -500]}
+  ],
+  "connections": {
+    "Open control board": {"main": [[{"node": "Audit channels and access", "type": "main", "index": 0}]]},
+    "Audit channels and access": {"main": [[{"node": "Instagram — connected and publishing", "type": "main", "index": 0}, {"node": "Telegram — channel and bot ready", "type": "main", "index": 0}, {"node": "YouTube — OAuth exists, quota check", "type": "main", "index": 0}, {"node": "TikTok — connect official account", "type": "main", "index": 0}, {"node": "Facebook — connect official account", "type": "main", "index": 0}]]},
+    "Instagram — connected and publishing": {"main": [[{"node": "Content funnel — hooks, video, CTA", "type": "main", "index": 0}]]},
+    "Telegram — channel and bot ready": {"main": [[{"node": "Content funnel — hooks, video, CTA", "type": "main", "index": 0}]]},
+    "YouTube — OAuth exists, quota check": {"main": [[{"node": "Content funnel — hooks, video, CTA", "type": "main", "index": 0}]]},
+    "TikTok — connect official account": {"main": [[{"node": "Content funnel — hooks, video, CTA", "type": "main", "index": 0}]]},
+    "Facebook — connect official account": {"main": [[{"node": "Content funnel — hooks, video, CTA", "type": "main", "index": 0}]]},
+    "Content funnel — hooks, video, CTA": {"main": [[{"node": "Approval center — owner decision", "type": "main", "index": 0}]]},
+    "Approval center — owner decision": {"main": [[{"node": "Publish, comments and analytics", "type": "main", "index": 0}]]},
+    "Publish, comments and analytics": {"main": [[{"node": "Lead funnel — Telegram, site, brief", "type": "main", "index": 0}]]},
+    "Lead funnel — Telegram, site, brief": {"main": [[{"node": "Monetization — services, pilot waitlist", "type": "main", "index": 0}]]},
+    "Monetization — services, pilot waitlist": {"main": [[{"node": "Weekly report and next decision", "type": "main", "index": 0}]]}
+  },
+  "pinData": {},
+  "active": false,
+  "settings": {"executionOrder": "v1"},
+  "versionId": "c0a00000-0000-4000-8000-000000000100",
+  "meta": {"templateCredsSetupCompleted": false},
+  "tags": []
+}

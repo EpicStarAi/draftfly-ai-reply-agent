@@ -1,0 +1,41 @@
+name: Import approved n8n workflow
+
+on:
+  workflow_dispatch:
+    inputs:
+      workflow_file:
+        description: Workflow JSON stored in this repository
+        required: true
+        default: automation/n8n/IBO_SOCIAL_CONTROL_BOARD.json
+        type: choice
+        options:
+          - automation/n8n/IBO_SOCIAL_CONTROL_BOARD.json
+
+permissions:
+  contents: read
+
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify n8n access
+        env:
+          N8N_BASE_URL: ${{ secrets.N8N_BASE_URL }}
+          N8N_API_KEY: ${{ secrets.N8N_API_KEY }}
+        run: |
+          curl --fail --silent --show-error \
+            --header "X-N8N-API-KEY: $N8N_API_KEY" \
+            "$N8N_BASE_URL/api/v1/workflows" > /dev/null
+      - name: Import inactive workflow
+        env:
+          N8N_BASE_URL: ${{ secrets.N8N_BASE_URL }}
+          N8N_API_KEY: ${{ secrets.N8N_API_KEY }}
+          WORKFLOW_FILE: ${{ inputs.workflow_file }}
+        run: |
+          curl --fail --silent --show-error --request POST \
+            --header "Content-Type: application/json" \
+            --header "X-N8N-API-KEY: $N8N_API_KEY" \
+            --data-binary "@$WORKFLOW_FILE" \
+            "$N8N_BASE_URL/api/v1/workflows"
