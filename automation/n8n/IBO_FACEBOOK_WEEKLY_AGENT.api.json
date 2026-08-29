@@ -1,0 +1,28 @@
+{
+  "name": "DRAFT — IBO Facebook Weekly AI Publisher",
+  "nodes": [
+    {"parameters": {}, "id": "fba-001", "name": "Start weekly content cycle", "type": "n8n-nodes-base.manualTrigger", "typeVersion": 1, "position": [0, 0]},
+    {"parameters": {"jsCode": "const themes = ['Проверка доступа к сервисам', 'Практический совет по цифровой свободе', 'Разбор новости без паники', 'VPN: как выбрать безопасный сценарий', 'AI-инструменты для работы', 'Ответы на частые вопросы', 'Итоги недели и приглашение в Telegram']; const today = new Date(); return themes.map((theme, i) => { const date = new Date(today); date.setDate(today.getDate() + i); return { json: { day: i + 1, publishDate: date.toISOString().slice(0,10), theme, funnel: 'Telegram: @INTERNET_BEZ_GRANIC_RUS | сайт: https://freerus.site', status: 'brief_ready' } }; });"}, "id": "fba-002", "name": "Build 7-day content plan", "type": "n8n-nodes-base.code", "typeVersion": 2, "position": [260, 0]},
+    {"parameters": {}, "id": "fba-003", "name": "AI: write hook, post and hashtags", "type": "n8n-nodes-base.noOp", "typeVersion": 1, "position": [540, 0]},
+    {"parameters": {}, "id": "fba-004", "name": "AI: prepare 9:16 video script and scenes", "type": "n8n-nodes-base.noOp", "typeVersion": 1, "position": [820, 0]},
+    {"parameters": {}, "id": "fba-005", "name": "Video generator: render draft", "type": "n8n-nodes-base.noOp", "typeVersion": 1, "position": [1100, 0]},
+    {"parameters": {}, "id": "fba-006", "name": "Add funnel: Telegram, freerus.site, CTA", "type": "n8n-nodes-base.noOp", "typeVersion": 1, "position": [1380, 0]},
+    {"parameters": {}, "id": "fba-007", "name": "Approval queue — owner decision", "type": "n8n-nodes-base.noOp", "typeVersion": 1, "position": [1660, 0]},
+    {"parameters": {}, "id": "fba-008", "name": "Facebook publish — only approved items", "type": "n8n-nodes-base.noOp", "typeVersion": 1, "position": [1940, 0]},
+    {"parameters": {}, "id": "fba-009", "name": "Collect reach, comments and leads", "type": "n8n-nodes-base.noOp", "typeVersion": 1, "position": [2220, 0]},
+    {"parameters": {}, "id": "fba-010", "name": "Weekly learning and next plan", "type": "n8n-nodes-base.noOp", "typeVersion": 1, "position": [2500, 0]},
+    {"parameters": {"content": "## Weekly Facebook AI Publisher\n**Current working pieces:** 7-day plan and Facebook Page access.\n\n**To connect before activation:**\n1. An AI model for final copy\n2. A video-rendering provider\n3. An approval inbox\n\nNo post can be released before an owner decision.", "height": 230, "width": 640, "color": 5}, "id": "fba-099", "name": "Workflow status", "type": "n8n-nodes-base.stickyNote", "typeVersion": 1, "position": [800, -350]}
+  ],
+  "connections": {
+    "Start weekly content cycle": {"main": [[{"node": "Build 7-day content plan", "type": "main", "index": 0}]]},
+    "Build 7-day content plan": {"main": [[{"node": "AI: write hook, post and hashtags", "type": "main", "index": 0}]]},
+    "AI: write hook, post and hashtags": {"main": [[{"node": "AI: prepare 9:16 video script and scenes", "type": "main", "index": 0}]]},
+    "AI: prepare 9:16 video script and scenes": {"main": [[{"node": "Video generator: render draft", "type": "main", "index": 0}]]},
+    "Video generator: render draft": {"main": [[{"node": "Add funnel: Telegram, freerus.site, CTA", "type": "main", "index": 0}]]},
+    "Add funnel: Telegram, freerus.site, CTA": {"main": [[{"node": "Approval queue — owner decision", "type": "main", "index": 0}]]},
+    "Approval queue — owner decision": {"main": [[{"node": "Facebook publish — only approved items", "type": "main", "index": 0}]]},
+    "Facebook publish — only approved items": {"main": [[{"node": "Collect reach, comments and leads", "type": "main", "index": 0}]]},
+    "Collect reach, comments and leads": {"main": [[{"node": "Weekly learning and next plan", "type": "main", "index": 0}]]}
+  },
+  "settings": {"executionOrder": "v1"}
+}
