@@ -1,0 +1,11 @@
+{
+  "name": "DRAFT — IBO MPT Video Preview V2",
+  "nodes": [
+    {"parameters": {}, "id": "mptv2-001", "name": "Start video preview", "type": "n8n-nodes-base.manualTrigger", "typeVersion": 1, "position": [0, 0]},
+    {"parameters": {"method": "POST", "url": "http://moneyprinterturbo-api:8080/api/v1/videos", "sendBody": true, "contentType": "json", "specifyBody": "json", "jsonBody": "{\"video_subject\":\"Как сохранить доступ к нужным сервисам\",\"video_script\":\"Нужный сервис внезапно не открывается? Не спешите искать случайные приложения. Проверьте безопасный способ подключения, сохраните резервный вариант и следите за актуальными инструкциями. Больше практических советов — в Telegram-канале Интернет без ограничений. Ссылка на сайт freerus.site.\",\"video_aspect\":\"9:16\",\"video_clip_duration\":5,\"video_count\":1,\"video_source\":\"pexels\",\"video_language\":\"ru-RU\",\"subtitle_enabled\":true,\"subtitle_position\":\"bottom\",\"font_size\":60,\"voice_rate\":1,\"bgm_type\":\"random\",\"bgm_volume\":0.15,\"paragraph_number\":1,\"match_materials_to_script\":true}"}, "id": "mptv2-002", "name": "Create MPT render task", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4.2, "position": [340, 0]},
+    {"parameters": {}, "id": "mptv2-003", "name": "Queued — do not publish", "type": "n8n-nodes-base.noOp", "typeVersion": 1, "position": [650, 0]},
+    {"parameters": {"content": "## MPT preview V2\nSends one fixed 9:16 Russian draft to the internal video service. No expressions, no AI generation node and no Facebook API call.\n\nFacebook is never called by this workflow.", "height": 180, "width": 620, "color": 5}, "id": "mptv2-099", "name": "Preview safeguards", "type": "n8n-nodes-base.stickyNote", "typeVersion": 1, "position": [220, -260]}
+  ],
+  "connections": {"Start video preview": {"main": [[{"node": "Create MPT render task", "type": "main", "index": 0}]]}, "Create MPT render task": {"main": [[{"node": "Queued — do not publish", "type": "main", "index": 0}]]}},
+  "settings": {"executionOrder": "v1"}
+}
