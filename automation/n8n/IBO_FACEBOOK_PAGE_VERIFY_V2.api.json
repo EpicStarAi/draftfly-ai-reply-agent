@@ -1,0 +1,11 @@
+{
+  "name": "VERIFY — IBO Facebook Page access v2",
+  "nodes": [
+    {"parameters": {}, "id": "fbv2-001", "name": "Start safe verification", "type": "n8n-nodes-base.manualTrigger", "typeVersion": 1, "position": [0, 0]},
+    {"parameters": {"method": "GET", "url": "https://graph.facebook.com/v26.0/1272843062581358?fields=id,name,category,can_post", "authentication": "predefinedCredentialType", "nodeCredentialType": "facebookGraphApi"}, "id": "fbv2-002", "name": "Verify Facebook Page — read only", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4.2, "position": [300, 0], "credentials": {"facebookGraphApi": {"id": "MBSkXzeHDOmnSFys", "name": "Facebook Graph account"}}},
+    {"parameters": {}, "id": "fbv2-003", "name": "Access verified — no post made", "type": "n8n-nodes-base.noOp", "typeVersion": 1, "position": [620, 0]},
+    {"parameters": {"content": "## Facebook Page: read-only verification\nThis workflow reads the Page name, category and publishing capability.\n\nIt cannot create posts, comments or ads.", "height": 180, "width": 560, "color": 4}, "id": "fbv2-099", "name": "Safety note", "type": "n8n-nodes-base.stickyNote", "typeVersion": 1, "position": [170, -260]}
+  ],
+  "connections": {"Start safe verification": {"main": [[{"node": "Verify Facebook Page — read only", "type": "main", "index": 0}]]}, "Verify Facebook Page — read only": {"main": [[{"node": "Access verified — no post made", "type": "main", "index": 0}]]}},
+  "settings": {"executionOrder": "v1"}
+}
