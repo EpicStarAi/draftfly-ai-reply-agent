@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { sql } from "drizzle-orm";
 import { db } from "@workspace/db";
+import { requireOperator } from "../middleware/requireOperator";
 import { operatorBillingTable } from "@workspace/db/schema";
 import { eq } from "drizzle-orm";
 import { getUncachableStripeClient } from "../stripeClient";
@@ -41,7 +42,7 @@ router.get("/billing/plans", async (_req, res) => {
   res.json({ plans });
 });
 
-router.get("/billing/subscription", async (_req, res) => {
+router.get("/billing/subscription", requireOperator, async (_req, res) => {
   const [billing] = await db.select().from(operatorBillingTable).limit(1);
 
   if (!billing?.stripeSubscriptionId) {
@@ -56,7 +57,7 @@ router.get("/billing/subscription", async (_req, res) => {
   res.json({ subscription: result.rows[0] ?? null, billing });
 });
 
-router.post("/billing/checkout", async (req, res) => {
+router.post("/billing/checkout", requireOperator, async (req, res) => {
   const { priceId } = req.body as { priceId: string };
   if (!priceId) { res.status(400).json({ error: "priceId is required" }); return; }
 
@@ -91,7 +92,7 @@ router.post("/billing/checkout", async (req, res) => {
   res.json({ url: session.url });
 });
 
-router.post("/billing/portal", async (_req, res) => {
+router.post("/billing/portal", requireOperator, async (_req, res) => {
   const [billing] = await db.select().from(operatorBillingTable).limit(1);
 
   if (!billing?.stripeCustomerId) {

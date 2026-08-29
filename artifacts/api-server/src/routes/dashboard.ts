@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { eq, desc, gte, and, type SQL } from "drizzle-orm";
 import { db, clientsTable, campaignsTable, draftsTable, activityTable, personasTable } from "@workspace/db";
+import { requireOperator } from "../middleware/requireOperator";
 import {
   GetDashboardStatsResponse,
   ListActivityQueryParams,
@@ -11,7 +12,7 @@ import {
 
 const router: IRouter = Router();
 
-router.get("/dashboard/stats", async (_req, res): Promise<void> => {
+router.get("/dashboard/stats", requireOperator, async (_req, res): Promise<void> => {
   const [clients, campaigns, allDrafts, personas] = await Promise.all([
     db.select().from(clientsTable),
     db.select().from(campaignsTable).where(eq(campaignsTable.isActive, true)),
@@ -47,7 +48,7 @@ router.get("/dashboard/stats", async (_req, res): Promise<void> => {
   }));
 });
 
-router.get("/dashboard/activity", async (req, res): Promise<void> => {
+router.get("/dashboard/activity", requireOperator, async (req, res): Promise<void> => {
   const query = ListActivityQueryParams.safeParse(req.query);
   if (!query.success) {
     res.status(400).json({ error: query.error.message });
@@ -64,7 +65,7 @@ router.get("/dashboard/activity", async (req, res): Promise<void> => {
   res.json(ListActivityResponse.parse(activity));
 });
 
-router.get("/dashboard/reply-trends", async (req, res): Promise<void> => {
+router.get("/dashboard/reply-trends", requireOperator, async (req, res): Promise<void> => {
   const query = GetReplyTrendsQueryParams.safeParse(req.query);
   if (!query.success) {
     res.status(400).json({ error: query.error.message });

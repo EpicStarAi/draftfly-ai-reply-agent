@@ -639,7 +639,7 @@ router.post("/slack/actions", async (req, res): Promise<void> => {
 });
 
 // POST /slack/test-message — send a test approval card to a channel
-router.post("/slack/test-message", async (req, res): Promise<void> => {
+router.post("/slack/test-message", requireOperator, async (req, res): Promise<void> => {
   const body = req.body as { channelId?: string; botToken?: string };
   if (!body.channelId) {
     res.status(400).json({ error: "channelId is required" });
@@ -651,7 +651,7 @@ router.post("/slack/test-message", async (req, res): Promise<void> => {
 });
 
 // POST /slack/send-approval — manually post an approval card for a draft
-router.post("/slack/send-approval", async (req, res): Promise<void> => {
+router.post("/slack/send-approval", requireOperator, async (req, res): Promise<void> => {
   const body = req.body as { draftId?: number; channelId?: string };
   if (!body.draftId || !body.channelId) {
     res.status(400).json({ error: "draftId and channelId are required" });

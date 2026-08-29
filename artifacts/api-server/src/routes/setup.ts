@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { eq, and } from "drizzle-orm";
 import { db, setupItemsTable } from "@workspace/db";
+import { requireOperator } from "../middleware/requireOperator";
 import {
   ListSetupItemsQueryParams,
   ListSetupItemsResponse,
@@ -11,7 +12,7 @@ import {
 
 const router: IRouter = Router();
 
-router.get("/setup", async (req, res): Promise<void> => {
+router.get("/setup", requireOperator, async (req, res): Promise<void> => {
   const query = ListSetupItemsQueryParams.safeParse(req.query);
   if (!query.success) {
     res.status(400).json({ error: query.error.message });
@@ -23,7 +24,7 @@ router.get("/setup", async (req, res): Promise<void> => {
   res.json(ListSetupItemsResponse.parse(items));
 });
 
-router.patch("/setup/:id", async (req, res): Promise<void> => {
+router.patch("/setup/:id", requireOperator, async (req, res): Promise<void> => {
   const params = UpdateSetupItemParams.safeParse(req.params);
   if (!params.success) {
     res.status(400).json({ error: params.error.message });

@@ -12,10 +12,11 @@ import {
   ApplyDraftActionBody,
   ApplyDraftActionResponse,
 } from "@workspace/api-zod";
+import { requireOperator } from "../middleware/requireOperator";
 
 const router: IRouter = Router();
 
-router.get("/drafts/pending", async (_req, res): Promise<void> => {
+router.get("/drafts/pending", requireOperator, async (_req, res): Promise<void> => {
   const drafts = await db
     .select()
     .from(draftsTable)
@@ -24,7 +25,7 @@ router.get("/drafts/pending", async (_req, res): Promise<void> => {
   res.json(ListPendingDraftsResponse.parse(drafts));
 });
 
-router.get("/drafts", async (req, res): Promise<void> => {
+router.get("/drafts", requireOperator, async (req, res): Promise<void> => {
   const query = ListDraftsQueryParams.safeParse(req.query);
   if (!query.success) {
     res.status(400).json({ error: query.error.message });
@@ -43,7 +44,7 @@ router.get("/drafts", async (req, res): Promise<void> => {
   res.json(ListDraftsResponse.parse(drafts));
 });
 
-router.get("/drafts/:id", async (req, res): Promise<void> => {
+router.get("/drafts/:id", requireOperator, async (req, res): Promise<void> => {
   const params = GetDraftParams.safeParse(req.params);
   if (!params.success) {
     res.status(400).json({ error: params.error.message });
@@ -57,7 +58,7 @@ router.get("/drafts/:id", async (req, res): Promise<void> => {
   res.json(GetDraftResponse.parse(draft));
 });
 
-router.patch("/drafts/:id/action", async (req, res): Promise<void> => {
+router.patch("/drafts/:id/action", requireOperator, async (req, res): Promise<void> => {
   const params = ApplyDraftActionParams.safeParse(req.params);
   if (!params.success) {
     res.status(400).json({ error: params.error.message });
@@ -131,7 +132,7 @@ router.patch("/drafts/:id/action", async (req, res): Promise<void> => {
 // POST /api/drafts/:id/repost — re-post the Slack approval card for an existing draft.
 // Resets status to "pending" and posts a fresh card. Safe to call on send_failed drafts.
 // Does NOT create a new draft — no duplicate.
-router.post("/drafts/:id/repost", async (req, res): Promise<void> => {
+router.post("/drafts/:id/repost", requireOperator, async (req, res): Promise<void> => {
   const id = parseInt(req.params.id ?? "", 10);
   if (isNaN(id)) {
     res.status(400).json({ error: "Invalid draft id" });
