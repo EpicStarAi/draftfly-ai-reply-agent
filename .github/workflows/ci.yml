@@ -24,4 +24,5 @@ jobs:
           cache-dependency-path: pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
       - run: pnpm build
+      - run: cp deploy/.env.example deploy/.env
       - run: docker compose -f deploy/docker-compose.yml config
