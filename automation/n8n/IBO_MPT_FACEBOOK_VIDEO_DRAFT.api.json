@@ -1,0 +1,12 @@
+{
+  "name": "DRAFT — IBO MPT Facebook Video Preview",
+  "nodes": [
+    {"parameters": {}, "id": "mpt-001", "name": "Start video preview", "type": "n8n-nodes-base.manualTrigger", "typeVersion": 1, "position": [0, 0]},
+    {"parameters": {"jsCode": "return [{ json: { video_subject: 'Как сохранить доступ к нужным сервисам', video_script: 'Нужный сервис внезапно не открывается? Не спешите искать случайные приложения. Проверьте безопасный способ подключения, сохраните резервный вариант и следите за актуальными инструкциями. Больше практических советов — в Telegram-канале Интернет без ограничений. Ссылка на сайт freerus.site.', video_aspect: '9:16', video_clip_duration: 5, video_count: 1, video_source: 'pexels', video_language: 'ru-RU', subtitle_enabled: true, subtitle_position: 'bottom', font_size: 60, voice_rate: 1, bgm_type: 'random', bgm_volume: 0.15, paragraph_number: 1, match_materials_to_script: true } }];"}, "id": "mpt-002", "name": "Prepare Russian 9:16 video draft", "type": "n8n-nodes-base.code", "typeVersion": 2, "position": [280, 0]},
+    {"parameters": {"method": "POST", "url": "http://moneyprinterturbo-api:8080/api/v1/videos", "sendBody": true, "contentType": "json", "specifyBody": "json", "jsonBody": "={{ JSON.stringify($json) }}"}, "id": "mpt-003", "name": "MoneyPrinterTurbo — create render task", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4.2, "position": [600, 0]},
+    {"parameters": {}, "id": "mpt-004", "name": "Render queued — do not publish", "type": "n8n-nodes-base.noOp", "typeVersion": 1, "position": [920, 0]},
+    {"parameters": {"content": "## First Facebook video preview\nCreates one vertical 9:16 draft with Russian voice/subtitles and CTA to Telegram + freerus.site.\n\nIt only sends a render job to MoneyPrinterTurbo. Facebook is never called by this workflow.", "height": 200, "width": 620, "color": 5}, "id": "mpt-099", "name": "Preview safeguards", "type": "n8n-nodes-base.stickyNote", "typeVersion": 1, "position": [250, -280]}
+  ],
+  "connections": {"Start video preview": {"main": [[{"node": "Prepare Russian 9:16 video draft", "type": "main", "index": 0}]]}, "Prepare Russian 9:16 video draft": {"main": [[{"node": "MoneyPrinterTurbo — create render task", "type": "main", "index": 0}]]}, "MoneyPrinterTurbo — create render task": {"main": [[{"node": "Render queued — do not publish", "type": "main", "index": 0}]]}},
+  "settings": {"executionOrder": "v1"}
+}
